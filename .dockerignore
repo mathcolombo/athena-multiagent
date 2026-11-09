@@ -1,0 +1,6 @@
+.venv
+.git
+.pilot
+.pilot-worktrees
+pilot
+**/__pycache__

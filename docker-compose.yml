@@ -1,0 +1,38 @@
+x-service: &service
+  environment:
+    RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+  depends_on:
+    rabbitmq:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/health')"]
+    interval: 5s
+    timeout: 3s
+    retries: 12
+
+services:
+  rabbitmq:
+    image: docker.io/library/rabbitmq:4-management
+    user: "999:999"
+    tmpfs:
+      - /var/lib/rabbitmq:mode=1777
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  catalog:
+    <<: *service
+    build: { context: ., args: { SERVICE: catalog } }
+    ports: ["8001:8000"]
+
+  cart:
+    <<: *service
+    build: { context: ., args: { SERVICE: cart } }
+    ports: ["8002:8000"]
+
+  orders:
+    <<: *service
+    build: { context: ., args: { SERVICE: orders } }
+    ports: ["8003:8000"]
