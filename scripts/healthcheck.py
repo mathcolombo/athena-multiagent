@@ -6,6 +6,7 @@ import urllib.error
 import urllib.request
 
 CATALOG, CART, ORDERS = (f"http://localhost:{port}" for port in (8001, 8002, 8003))
+WEB = "http://localhost:8080"
 TIMEOUT_S = 30
 
 
@@ -37,6 +38,9 @@ def main() -> int:
         for base in (CATALOG, CART, ORDERS):
             wait_until(lambda: call("GET", f"{base}/health")[0] == 200, f"{base} indisponível")
             print(f"OK saúde {base}")
+
+        wait_until(lambda: call("GET", f"{WEB}/api/catalog/health")[0] == 200, "front indisponível")
+        print(f"OK front {WEB}")
 
         _, product = call("POST", f"{CATALOG}/products", {"name": "Sonda", "price_cents": 1000, "stock": 3})
         _, cart = call("POST", f"{CART}/carts", {"customer_id": "homolog"})

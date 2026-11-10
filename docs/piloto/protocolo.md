@@ -92,6 +92,10 @@ No G5, revise o PR no GitHub e faça o merge antes de responder `a` no terminal.
 .venv/bin/python -m orchestrator report
 ```
 
+## Front de homologação
+
+Durante o G7, a homologação fica no ar em http://localhost:8080 para o aprovador conferir o comportamento antes de autorizar a virada. O front está fora do escopo dos agentes; funcionalidades novas sem tela, como o cancelamento de pedido, são conferidas pelas APIs em `/docs`.
+
 ## Papéis nos gates
 
 | Gate | Decisão | Papel |

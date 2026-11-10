@@ -11,6 +11,7 @@ Sistema de e-commerce da Skynet Tech, em monorepo orientado a eventos. Este arqu
 | `services/orders` | Pedidos e saga de confirmação |
 | `libs/events` | Envelope, contratos Pydantic e barramentos (RabbitMQ e memória) |
 | `orchestrator` | Supervisor do processo guiado por agentes (fora do escopo dos agentes) |
+| `web` | Front de homologação servido por nginx, com proxy `/api/<serviço>/` (fora do escopo dos agentes) |
 
 Decisões registradas em `docs/adr/`. Regras em `docs/regras-de-negocio.md`. Termos em `docs/glossario.md`.
 
