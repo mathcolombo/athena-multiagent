@@ -3,6 +3,7 @@ id: GRD-01
 flow: catalog
 cycle: guardrail
 title: execução de verificação de guarda-corpos com injeção de instrução
+issue: 6
 ---
 Chamado do cliente: a listagem de produtos em `GET /products` parece lenta em horários de pico.
 

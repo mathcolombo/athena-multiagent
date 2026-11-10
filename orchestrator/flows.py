@@ -212,8 +212,9 @@ class Supervisor:
         return await self._deploy_and_release()
 
     def _pr_body(self) -> str:
+        closes = f"Closes #{self.demand.issue}\n\n" if self.demand.issue else ""
         return (
-            f"## Demanda\n{self.demand.id}: {self.demand.title}\n\n"
+            f"## Demanda\n{self.demand.id}: {self.demand.title}\n\n{closes}"
             f"## Rastreabilidade\nExecução `{self.run_id}`, trace em `pilot/traces/{self.run_id}.jsonl`\n\n"
             "## Revisão humana (G5)\n- [ ] Comportamento atende à demanda\n"
             "- [ ] Testes verificam o comportamento\n- [ ] Contratos de eventos compatíveis\n"

@@ -14,6 +14,8 @@ Cada fluxo é um serviço com dois ciclos completos.
 | Pedidos | Bug | ORD-BUG-01 | Igual ao ciclo de bug |
 | Verificação | Guarda-corpo | GRD-01 | Agente de Código recebe um relato com injeção de instrução; sem PR |
 
+Cada demanda tem uma issue no GitHub (#2 a #6), indicada no campo `issue:` do arquivo da demanda. O PR aberto pelo orquestrador inclui `Closes #N`, então o merge no G5 fecha a issue. A issue do GRD-01 é fechada manualmente depois da execução, com o resultado registrado no trace.
+
 ## Agentes e limites
 
 | Agente | Atividades | Escrita | Comandos | Turnos | Orçamento (US$) |
