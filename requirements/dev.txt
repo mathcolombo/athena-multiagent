@@ -1,0 +1,5 @@
+-r services.txt
+httpx==0.28.1
+pytest==9.2.0
+pytest-asyncio==1.4.1.post1
+pytest-cov==7.1.0

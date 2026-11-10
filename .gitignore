@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+coverage.xml
+*.db
+.env
+.env.*
+!.env.example
+.pilot/
+.pilot-worktrees/
+pilot/traces/rehearsal/
+pilot/runs/rehearsal/

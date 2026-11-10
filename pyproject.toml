@@ -1,0 +1,20 @@
+[project]
+name = "skynet-ecommerce"
+version = "0.1.0"
+description = "Monorepo orientado a eventos da Skynet Tech usado no piloto de processo guiado por agentes"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
+pythonpath = [
+    "libs/events",
+    "services/catalog",
+    "services/cart",
+    "services/orders",
+    ".",
+]
+testpaths = ["libs/events/tests", "services", "orchestrator/tests"]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+omit = ["*/main.py", "*/tests/*"]

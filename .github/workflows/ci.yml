@@ -1,0 +1,46 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements/*.txt
+      - run: pip install -r requirements/orchestrator.txt
+      - name: Selecionar serviços alterados
+        id: select
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -z "$BASE_SHA" ]; then
+            services="catalog cart orders"
+          else
+            changed="$(git diff --name-only "$BASE_SHA"...HEAD)"
+            if echo "$changed" | grep -qE '^(libs/|requirements/|pyproject.toml)'; then
+              services="catalog cart orders"
+            else
+              services="$(echo "$changed" | sed -nE 's#^services/([^/]+)/.*#\1#p' | sort -u | tr '\n' ' ')"
+            fi
+          fi
+          echo "services=$services" >> "$GITHUB_OUTPUT"
+      - name: Testes por serviço
+        env:
+          SERVICES: ${{ steps.select.outputs.services }}
+        run: |
+          for service in $SERVICES; do
+            bash scripts/ci.sh "$service"
+          done
+      - name: Testes do orquestrador
+        run: pytest orchestrator/tests -q
