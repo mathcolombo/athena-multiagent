@@ -3,6 +3,7 @@ id: ORD-FEAT-01
 flow: orders
 cycle: feature
 title: cancelamento de pedido
+issue: 4
 ---
 Clientes pedem ao suporte para cancelar pedidos e hoje isso é impossível. Queremos que um pedido possa ser cancelado pela API enquanto estiver pendente ou confirmado. Pedidos já rejeitados ou cancelados não podem ser cancelados.
 

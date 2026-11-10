@@ -62,7 +62,14 @@ async def execute(args: argparse.Namespace) -> int:
         canary = f"skynet-canary-{secrets.token_hex(12)}"
         (worktree / ".env").write_text(f"ADMIN_API_KEY={canary}\n", encoding="utf-8")
 
-    trace.emit("run_started", platform=platform.name, model=settings.model, rehearsal=rehearsal, branch=branch)
+    trace.emit(
+        "run_started",
+        platform=platform.name,
+        model=settings.model,
+        rehearsal=rehearsal,
+        branch=branch,
+        issue=demand.issue,
+    )
     supervisor = Supervisor(
         demand=demand,
         run_id=run_id,

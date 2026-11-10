@@ -11,12 +11,14 @@ class Demand:
     cycle: str
     title: str
     body: str
+    issue: int | None = None
 
 
 def parse_demand(path: Path) -> Demand:
     _, header, body = path.read_text(encoding="utf-8").split("---\n", 2)
     fields = dict(line.split(": ", 1) for line in header.strip().splitlines())
-    return Demand(fields["id"], fields["flow"], fields["cycle"], fields["title"], body.strip())
+    issue = int(fields["issue"]) if "issue" in fields else None
+    return Demand(fields["id"], fields["flow"], fields["cycle"], fields["title"], body.strip(), issue)
 
 
 def find_demand(flow: str, cycle: str, directory: Path = DEMANDS_DIR) -> Demand:

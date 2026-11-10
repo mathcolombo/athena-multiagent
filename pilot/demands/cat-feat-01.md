@@ -3,6 +3,7 @@ id: CAT-FEAT-01
 flow: catalog
 cycle: feature
 title: alerta de estoque baixo
+issue: 2
 ---
 A equipe de compras só descobre que um produto está acabando quando ele zera. Queremos que o catálogo avise quando o estoque de um produto cair abaixo de um limite configurado para aquele produto, para que outros sistemas possam reagir.
 

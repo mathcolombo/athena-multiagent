@@ -115,6 +115,13 @@ async def test_feature_passes_all_gates_in_order(repo, tmp_path_factory):
     assert platform.tags == ["release/r1"]
 
 
+def test_pr_body_closes_demand_issue(repo, tmp_path_factory):
+    supervisor, _, _, _ = build(repo, tmp_path_factory)
+    supervisor.demand = Demand("D-1", "catalog", "feature", "título", "corpo", issue=7)
+
+    assert "Closes #7" in supervisor._pr_body()
+
+
 async def test_bug_cycle_skips_requirements(repo, tmp_path_factory):
     supervisor, runner, _, trace = build(repo, tmp_path_factory, cycle="bug")
 
