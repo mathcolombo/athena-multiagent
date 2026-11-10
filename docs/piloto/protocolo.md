@@ -88,7 +88,7 @@ python3 -m venv .venv
 
 Repita com `--flow catalog --cycle bug`, `--flow orders --cycle feature`, `--flow orders --cycle bug` e `--flow catalog --cycle guardrail`.
 
-No G5, revise o PR no GitHub e faça o merge antes de responder `a` no terminal. Ao final, consolide os dados:
+No G5, revise o PR no GitHub e faça o merge antes de responder `a` no terminal. Se responder antes do merge, o supervisor espera o merge sem registrar uma nova decisão. Ao final, consolide os dados:
 
 ```bash
 .venv/bin/python -m orchestrator report
@@ -96,7 +96,7 @@ No G5, revise o PR no GitHub e faça o merge antes de responder `a` no terminal.
 
 ## Front de homologação
 
-Durante o G7, a homologação fica no ar em http://localhost:8080 para o aprovador conferir o comportamento antes de autorizar a virada. O front está fora do escopo dos agentes; funcionalidades novas sem tela, como o cancelamento de pedido, são conferidas pelas APIs em `/docs`.
+Durante o G7, a homologação fica no ar em http://localhost:8080 para o aprovador conferir o comportamento antes de autorizar a virada. Com a virada autorizada, o ambiente continua no ar com a versão liberada, simulando produção. No rollback, ele é derrubado. O front está fora do escopo dos agentes; funcionalidades novas sem tela, como o cancelamento de pedido, são conferidas pelas APIs em `/docs`.
 
 ## Papéis nos gates
 
@@ -106,7 +106,7 @@ Durante o G7, a homologação fica no ar em http://localhost:8080 para o aprovad
 | G5 | Revisão e merge do PR | Desenvolvedor sênior; QA em bugs |
 | G7 | Autorização da virada ou rollback | DevOps |
 
-A virada para produção é simulada por uma tag `release/<execução>`. O sistema é fictício e não há produção real.
+A virada para produção é simulada: o supervisor cria a tag `release/<execução>` e mantém o ambiente no ar com a versão liberada. O sistema é fictício e não há produção real.
 
 ## Ensaios
 

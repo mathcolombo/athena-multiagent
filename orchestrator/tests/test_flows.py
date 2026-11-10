@@ -27,7 +27,7 @@ def repo(tmp_path, monkeypatch):
     monkeypatch.setenv("GIT_COMMITTER_EMAIL", "t@t")
     (tmp_path / "scripts").mkdir()
     (tmp_path / "scripts/healthcheck.py").write_text("print('ok')\n")
-    (tmp_path / "scripts/deploy_homolog.sh").write_text("exit 0\n")
+    (tmp_path / "scripts/deploy_homolog.sh").write_text('mkdir -p .pilot && echo "$1" >> .pilot/deploy.log\n')
     (tmp_path / "services/catalog/tests").mkdir(parents=True)
     (tmp_path / "services/catalog/mod.py").write_text("VALUE = 1\n")
     (tmp_path / "docs/backlog").mkdir(parents=True)
@@ -44,15 +44,16 @@ class FakePlatform:
     name = "fake"
     base_ref = "main"
 
-    def __init__(self, ci=(True,)):
+    def __init__(self, ci=(True,), merged=(True,)):
         self.ci = list(ci)
+        self.merged = list(merged)
         self.tags = []
 
     def prepare_base(self): ...
     def open_pr(self, worktree, branch, title, body): return PullRequest(1, "url", branch)
     def push(self, worktree, branch): ...
     def wait_ci(self, worktree, pr, service): return CiResult(self.ci.pop(0) if self.ci else True, "log")
-    def is_merged(self, worktree, pr): return True
+    def is_merged(self, worktree, pr): return self.merged.pop(0) if self.merged else True
     def complete_review(self, worktree, pr): ...
     def review_comments(self, worktree, pr): return ""
     def sync_merged(self, worktree): ...
@@ -122,6 +123,27 @@ def test_pr_body_closes_demand_issue(repo, tmp_path_factory):
     assert "Closes #7" in supervisor._pr_body()
 
 
+def deploy_calls(repo):
+    log = repo / ".pilot/deploy.log"
+    return log.read_text().split() if log.exists() else []
+
+
+async def test_approved_release_keeps_environment_running(repo, tmp_path_factory):
+    supervisor, _, _, _ = build(repo, tmp_path_factory)
+
+    assert await supervisor.run() == "completed"
+    assert "down" not in deploy_calls(repo)
+
+
+async def test_g5_waits_for_merge_without_new_gate_decision(repo, tmp_path_factory):
+    supervisor, _, _, trace = build(repo, tmp_path_factory, platform=FakePlatform(merged=(False, False, True)))
+
+    assert await supervisor.run() == "completed"
+    assert [e["gate"] for e in events(trace, "gate_decision")] == ["G3", "G5", "G7"]
+    assert len(events(trace, "merge_pending")) == 2
+    assert not events(trace, "failure")
+
+
 async def test_bug_cycle_skips_requirements(repo, tmp_path_factory):
     supervisor, runner, _, trace = build(repo, tmp_path_factory, cycle="bug")
 
@@ -176,6 +198,7 @@ async def test_g7_rejection_does_not_release(repo, tmp_path_factory):
     assert await supervisor.run() == "rolled_back"
     assert platform.tags == []
     assert events(trace, "rollback")
+    assert deploy_calls(repo) == ["down"]
 
 
 async def test_budget_exhaustion_aborts_with_category(repo, tmp_path_factory):

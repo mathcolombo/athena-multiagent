@@ -254,11 +254,11 @@ class Supervisor:
                 self.platform.push(self.worktree, self.branch)
                 await self._wait_ci(pull_request)
             self.platform.complete_review(self.worktree, pull_request)
-            if self.platform.is_merged(self.worktree, pull_request):
-                self.trace.emit("pr_merged", number=pull_request.number, rejections=rejections)
-                return
-            self._failure("processo", "G5 aprovado sem merge efetivo do PR", gate="G5")
-            print("O PR ainda não foi mesclado. Faça o merge e responda novamente.")
+            while not self.platform.is_merged(self.worktree, pull_request):
+                self.trace.emit("merge_pending", number=pull_request.number)
+                self.gates.wait(f"O PR {pull_request.url} ainda não foi mesclado. Faça o merge e pressione Enter.")
+            self.trace.emit("pr_merged", number=pull_request.number, rejections=rejections)
+            return
 
     async def _rework(self, pull_request: PullRequest, decision: GateDecision) -> None:
         comments = self.platform.review_comments(self.worktree, pull_request)
@@ -275,6 +275,8 @@ class Supervisor:
     async def _deploy_and_release(self) -> str:
         self.platform.sync_merged(self.worktree)
         self._record_coverage("after")
+        (self.worktree / DEPLOY_REPORT).parent.mkdir(exist_ok=True)
+        released = False
         try:
             await self._agent(
                 DEPLOY,
@@ -298,9 +300,12 @@ class Supervisor:
             tag = f"release/{self.run_id}"
             self.platform.tag_release(self.worktree, tag)
             self.trace.emit("release", tag=tag)
+            released = True
             return "completed"
         finally:
-            run(["bash", "scripts/deploy_homolog.sh", "down"], self.worktree, check=False)
+            # A versão liberada no G7 continua no ar como produção simulada; nos demais casos o ambiente é derrubado.
+            if not released:
+                run(["bash", "scripts/deploy_homolog.sh", "down"], self.worktree, check=False)
 
     def _archive_deploy_report(self) -> str:
         source = self.worktree / DEPLOY_REPORT

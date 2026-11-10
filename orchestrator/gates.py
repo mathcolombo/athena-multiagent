@@ -27,6 +27,8 @@ class GateDecision:
 class Gates(Protocol):
     def decide(self, gate: str, summary: str, can_edit: bool = True) -> GateDecision: ...
 
+    def wait(self, message: str) -> None: ...
+
 
 class TerminalGates:
     """Aprovação humana real; o tempo informado alimenta a métrica de esforço."""
@@ -65,6 +67,9 @@ class TerminalGates:
         answer = input(f"Minutos de trabalho humano [{wall / 60:.1f}]: ").strip().replace(",", ".")
         return GateDecision(decision, comment, approver, wall, float(answer) if answer else wall / 60, category, target)
 
+    def wait(self, message: str) -> None:
+        input(message)
+
 
 class ScriptedGates:
     """Somente para ensaios e testes: as execuções geradas ficam fora do relatório oficial."""
@@ -76,3 +81,6 @@ class ScriptedGates:
         if self.decisions:
             return self.decisions.pop(0)
         return GateDecision("approved", "aprovação automática de ensaio", "ensaio", 0.0, 0.0)
+
+    def wait(self, message: str) -> None:
+        pass
