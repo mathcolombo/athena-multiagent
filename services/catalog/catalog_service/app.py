@@ -88,15 +88,17 @@ def create_app(database_path: str, bus: EventBus) -> FastAPI:
 
     @app.patch("/products/{product_id}")
     async def update_product(product_id: str, body: ProductUpdate) -> dict:
-        product = db.update_product(product_id, body.name, body.price_cents, body.stock)
-        if product is None:
+        previous = db.get_product(product_id)
+        if previous is None:
             raise HTTPException(status_code=404, detail="produto não encontrado")
-        if body.price_cents is not None and body.price_cents != product["price_cents"]:
+        old_price_cents = previous["price_cents"]
+        product = db.update_product(product_id, body.name, body.price_cents, body.stock)
+        if body.price_cents is not None and body.price_cents != old_price_cents:
             await bus.publish(
                 new_event(
                     ProductPriceChanged(
                         product_id=product_id,
-                        old_price_cents=product["price_cents"],
+                        old_price_cents=old_price_cents,
                         new_price_cents=body.price_cents,
                     ),
                     PRODUCER,
