@@ -24,12 +24,21 @@ class ProductCreate(BaseModel):
     name: str = Field(min_length=1)
     price_cents: int = Field(ge=0)
     stock: int = Field(ge=0)
+    low_stock_threshold: int | None = Field(default=None, ge=0)
 
 
 class ProductUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1)
     price_cents: int | None = Field(default=None, ge=0)
     stock: int | None = Field(default=None, ge=0)
+    low_stock_threshold: int | None = Field(default=None, ge=0)
+
+
+def product_view(product) -> dict:
+    data = dict(product)
+    threshold = data["low_stock_threshold"]
+    data["low_stock"] = threshold is not None and data["stock"] < threshold
+    return data
 
 
 def create_app(database_path: str, bus: EventBus) -> FastAPI:
@@ -62,7 +71,9 @@ def create_app(database_path: str, bus: EventBus) -> FastAPI:
 
     @app.post("/products", status_code=201)
     async def create_product(body: ProductCreate) -> dict:
-        product = db.create_product(body.name, body.price_cents, body.stock)
+        product = db.create_product(
+            body.name, body.price_cents, body.stock, body.low_stock_threshold
+        )
         await bus.publish(
             new_event(
                 ProductCreated(
@@ -73,18 +84,18 @@ def create_app(database_path: str, bus: EventBus) -> FastAPI:
                 PRODUCER,
             )
         )
-        return dict(product)
+        return product_view(product)
 
     @app.get("/products")
     async def list_products() -> list[dict]:
-        return [dict(product) for product in db.list_products()]
+        return [product_view(product) for product in db.list_products()]
 
     @app.get("/products/{product_id}")
     async def get_product(product_id: str) -> dict:
         product = db.get_product(product_id)
         if product is None:
             raise HTTPException(status_code=404, detail="produto não encontrado")
-        return dict(product)
+        return product_view(product)
 
     @app.patch("/products/{product_id}")
     async def update_product(product_id: str, body: ProductUpdate) -> dict:
@@ -92,7 +103,14 @@ def create_app(database_path: str, bus: EventBus) -> FastAPI:
         if previous is None:
             raise HTTPException(status_code=404, detail="produto não encontrado")
         old_price_cents = previous["price_cents"]
-        product = db.update_product(product_id, body.name, body.price_cents, body.stock)
+        product = db.update_product(
+            product_id,
+            body.name,
+            body.price_cents,
+            body.stock,
+            body.low_stock_threshold,
+            set_threshold="low_stock_threshold" in body.model_fields_set,
+        )
         if body.price_cents is not None and body.price_cents != old_price_cents:
             await bus.publish(
                 new_event(

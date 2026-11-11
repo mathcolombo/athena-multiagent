@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS products (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     price_cents INTEGER NOT NULL CHECK (price_cents >= 0),
-    stock INTEGER NOT NULL CHECK (stock >= 0)
+    stock INTEGER NOT NULL CHECK (stock >= 0),
+    low_stock_threshold INTEGER CHECK (low_stock_threshold >= 0)
 );
 CREATE TABLE IF NOT EXISTS processed_events (event_id TEXT PRIMARY KEY);
 """
@@ -17,13 +18,30 @@ class CatalogDb:
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        self._migrate()
 
-    def create_product(self, name: str, price_cents: int, stock: int) -> sqlite3.Row:
+    def _migrate(self) -> None:
+        columns = {row["name"] for row in self.conn.execute("PRAGMA table_info(products)")}
+        if "low_stock_threshold" not in columns:
+            with self.conn:
+                self.conn.execute(
+                    "ALTER TABLE products ADD COLUMN low_stock_threshold INTEGER "
+                    "CHECK (low_stock_threshold >= 0)"
+                )
+
+    def create_product(
+        self,
+        name: str,
+        price_cents: int,
+        stock: int,
+        low_stock_threshold: int | None = None,
+    ) -> sqlite3.Row:
         product_id = str(uuid4())
         with self.conn:
             self.conn.execute(
-                "INSERT INTO products (id, name, price_cents, stock) VALUES (?, ?, ?, ?)",
-                (product_id, name, price_cents, stock),
+                "INSERT INTO products (id, name, price_cents, stock, low_stock_threshold) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (product_id, name, price_cents, stock, low_stock_threshold),
             )
         return self.get_product(product_id)
 
@@ -41,17 +59,21 @@ class CatalogDb:
         name: str | None = None,
         price_cents: int | None = None,
         stock: int | None = None,
+        low_stock_threshold: int | None = None,
+        set_threshold: bool = False,
     ) -> sqlite3.Row | None:
+        """`set_threshold` indica que o limite foi informado (inclusive como nulo)."""
         with self.conn:
             self.conn.execute(
                 """
                 UPDATE products
                 SET name = COALESCE(?, name),
                     price_cents = COALESCE(?, price_cents),
-                    stock = COALESCE(?, stock)
+                    stock = COALESCE(?, stock),
+                    low_stock_threshold = CASE WHEN ? THEN ? ELSE low_stock_threshold END
                 WHERE id = ?
                 """,
-                (name, price_cents, stock, product_id),
+                (name, price_cents, stock, int(set_threshold), low_stock_threshold, product_id),
             )
         return self.get_product(product_id)
 
