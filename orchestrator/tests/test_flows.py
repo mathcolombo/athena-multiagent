@@ -31,6 +31,7 @@ def repo(tmp_path, monkeypatch):
     monkeypatch.setenv("GIT_COMMITTER_EMAIL", "t@t")
     (tmp_path / "scripts").mkdir()
     (tmp_path / "scripts/healthcheck.py").write_text("print('ok')\n")
+    (tmp_path / "scripts/ci.sh").write_text("pytest services/catalog/tests -q\n")
     (tmp_path / "scripts/deploy_homolog.sh").write_text('mkdir -p .pilot && echo "$1" >> .pilot/deploy.log\n')
     (tmp_path / "services/catalog/tests").mkdir(parents=True)
     (tmp_path / "services/catalog/mod.py").write_text("VALUE = 1\n")
@@ -52,6 +53,7 @@ class FakePlatform:
         self.ci = list(ci)
         self.merged = list(merged)
         self.tags = []
+        self.comments = []
 
     def prepare_base(self): ...
     def open_pr(self, worktree, branch, title, body): return PullRequest(1, "url", branch)
@@ -62,6 +64,7 @@ class FakePlatform:
     def review_comments(self, worktree, pr): return ""
     def sync_merged(self, worktree): ...
     def tag_release(self, worktree, tag): self.tags.append(tag)
+    def comment_issue(self, worktree, number, body): self.comments.append((number, body))
 
 
 class FakeRunner:
@@ -187,6 +190,77 @@ def test_visual_decisions_follow_interface_section(repo, tmp_path_factory):
     supervisor.demand = Demand("D-1", "catalog", "feature", "t", "corpo", interface="Ícone de alerta ao lado do estoque")
     assert "<interface>\nÍcone de alerta ao lado do estoque\n</interface>" in supervisor.demand_block
     assert "sem alterar layout" not in supervisor.demand_block
+
+
+async def test_g3_decision_and_story_are_commented_on_issue(repo, tmp_path_factory):
+    reject = GateDecision("rejected", "faltou cenário de exceção", "Ana (PO)", 1.0, 3.0, "outra")
+    gates = ScriptedGates([reject])
+    supervisor, _, platform, trace = build(repo, tmp_path_factory, gates=gates)
+    supervisor.demand = Demand("D-1", "catalog", "feature", "título", "corpo", issue=9)
+
+    assert await supervisor.run() == "completed"
+    rejected, approved = platform.comments[:2]
+    assert rejected[0] == 9 and "reprovada" in rejected[1] and "faltou cenário de exceção" in rejected[1]
+    assert "Ana (PO)" in rejected[1] and "### T1: contrato" not in rejected[1]
+    assert "aprovada" in approved[1] and "### T1: contrato" in approved[1]
+    assert len(events(trace, "issue_commented")) == 2
+
+
+async def test_new_business_rule_is_shown_and_recorded_at_g3(repo, tmp_path_factory):
+    (repo / "docs/regras-de-negocio.md").write_text("| RN-01 | x |\n")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "regras"], cwd=repo, check=True)
+
+    class WithRule(FakeRunner):
+        async def __call__(self, spec, prompt, service, worktree, visual_changes=False):
+            if spec.name == "requisitos":
+                (worktree / "docs/regras-de-negocio.md").write_text("| RN-01 | x |\n| RN-02 | nova |\n")
+            return await super().__call__(spec, prompt, service, worktree, visual_changes)
+
+    supervisor, _, platform, _ = build(repo, tmp_path_factory, runner=WithRule(repo))
+    supervisor.demand = Demand("D-1", "catalog", "feature", "título", "corpo", issue=9)
+
+    assert await supervisor.run() == "completed"
+    assert "+| RN-02 | nova |" in platform.comments[0][1]
+
+
+async def test_failing_suite_goes_back_to_agents_before_commit(repo, tmp_path_factory):
+    class FixesOnSecondTry(FakeRunner):
+        fixes = []
+
+        async def __call__(self, spec, prompt, service, worktree, visual_changes=False):
+            if "suíte de testes" in prompt:
+                self.fixes.append(spec.name)
+                (worktree / "services/catalog/tests/test_broken.py").unlink(missing_ok=True)
+                return AgentResult(spec.name, "corrigido", False, "success", 0.1)
+            result = await super().__call__(spec, prompt, service, worktree, visual_changes)
+            if spec.name == "testes" and self.calls.count("testes") == 1:
+                (worktree / "services/catalog/tests/test_broken.py").write_text("def test_x():\n    assert False\n")
+            return result
+
+    supervisor, runner, _, trace = build(repo, tmp_path_factory, runner=FixesOnSecondTry(repo))
+
+    assert await supervisor.run() == "completed"
+    assert [e["passed"] for e in events(trace, "suite_result")][:2] == [False, True]
+    assert runner.fixes == ["codigo"]
+    assert events(trace, "failure")[0]["category"] == "suite_vermelha"
+
+
+async def test_ci_fix_without_changes_stops_immediately(repo, tmp_path_factory):
+    class Blocked(FakeRunner):
+        async def __call__(self, spec, prompt, service, worktree, visual_changes=False):
+            if "A CI falhou" in prompt:
+                self.calls.append(spec.name)
+                return AgentResult(spec.name, "a causa está fora da minha área", False, "success", 0.1)
+            return await super().__call__(spec, prompt, service, worktree, visual_changes)
+
+    supervisor, _, _, trace = build(repo, tmp_path_factory, runner=Blocked(repo), platform=FakePlatform(ci=(False, False, False)))
+
+    with pytest.raises(RunAborted):
+        await supervisor.run()
+    assert len(events(trace, "ci_result")) == 1
+    blocked = [e for e in events(trace, "failure") if e["category"] == "correcao_bloqueada"]
+    assert blocked[0]["description"] == "a causa está fora da minha área"
 
 
 async def test_bug_cycle_skips_requirements(repo, tmp_path_factory):

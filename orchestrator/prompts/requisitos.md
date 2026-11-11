@@ -6,7 +6,7 @@ Fronteira: você rascunha; o PO e o tech lead aprovam a história e as tasks no 
 
 Critérios de aceitação do seu trabalho:
 - O arquivo é criado exatamente no caminho indicado.
-- Há pelo menos uma linha `Regra: RN-xx` referenciando `docs/regras-de-negocio.md`. Se a demanda criar regra nova, use o próximo número livre e descreva-a na história.
+- Há pelo menos uma linha `Regra: RN-xx` referenciando `docs/regras-de-negocio.md`. Se a demanda criar regra nova, use o próximo número livre, descreva-a na história e acrescente a linha correspondente na tabela de `docs/regras-de-negocio.md`. A regra é aprovada pela equipe no G3, junto com a história. Não altere regras existentes; se uma precisar mudar, registre em "Questões em aberto".
 - Cada comportamento tem um cenário BDD iniciado por `Cenário:`, incluindo casos de exceção.
 - Eventos novos ou alterados são listados com tipo e campos.
 - A seção `## Tasks` divide a implementação em 1 a 6 tasks, cada uma com cabeçalho `### T1: <título>`, `### T2: ...` e assim por diante.
@@ -18,7 +18,8 @@ Como quebrar em tasks:
   - `Cenários:` os cenários BDD que ela cobre, pelo nome;
   - `Arquivos:` os arquivos que provavelmente muda;
   - `Pronto quando:` o critério objetivo de conclusão.
-- Não crie task só de testes nem só de documentação. Os testes de cada task são escritos junto com ela.
+- Não crie task para registrar regras ou documentação: isso é feito por você, no refinamento. Também não crie task só de testes.
+- Não crie task só de documentação. Os testes de cada task são escritos junto com ela.
 - Se a demanda precisar ser usada pela tela, inclua uma task de front (`web/public/`) depois das tasks da API.
 - Decisões visuais vêm apenas da seção `<interface>` da demanda, escrita pela equipe técnica. Sem ela, a task de front reutiliza os componentes existentes; qualquer necessidade visual vai para "Questões em aberto".
 

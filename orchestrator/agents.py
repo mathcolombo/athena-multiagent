@@ -8,6 +8,7 @@ READ_TOOLS = ("Read", "Glob", "Grep")
 TEST_COMMANDS = (
     ("pytest",),
     ("node", "--test"),
+    ("bash", "scripts/ci.sh"),
     ("python", "-m", "pytest"),
     ("git", "status"),
     ("git", "diff"),
@@ -49,6 +50,7 @@ TESTES = AgentSpec("testes", "testes.md", (*READ_TOOLS, "Write", "Edit", "Bash")
 DEPLOY = AgentSpec("deploy", "deploy.md", (*READ_TOOLS, "Write", "Bash"), 20, 1.0, False)
 
 
+BUSINESS_RULES = "docs/regras-de-negocio.md"
 WEB_CODE = "web/public/"
 WEB_TESTS = "web/tests/"
 WEB_STYLES = "web/public/styles.css"
@@ -61,7 +63,7 @@ def policy_for(spec: AgentSpec, service: str, worktree: Path, visual_changes: bo
     events_tests = "libs/events/tests/"
     styles = () if visual_changes else (WEB_STYLES,)
     scopes: dict[str, dict] = {
-        "requisitos": {"writable": ("docs/backlog/",)},
+        "requisitos": {"writable": ("docs/backlog/", BUSINESS_RULES)},
         "codigo": {
             "writable": (service_dir, "libs/events/", WEB_CODE, ".pilot/repro/"),
             "write_excluded": (service_tests, events_tests, *styles),

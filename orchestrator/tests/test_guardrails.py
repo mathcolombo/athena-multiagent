@@ -67,9 +67,16 @@ def test_requisitos_cannot_run_commands():
     assert evaluate(policy(REQUISITOS), "Bash", {"command": "pytest"}).rule == "tool_not_allowed"
 
 
-def test_requisitos_writes_only_backlog():
+def test_requisitos_writes_backlog_and_business_rules_only():
     assert evaluate(policy(REQUISITOS), "Write", {"file_path": "docs/backlog/X.md"}).allowed
+    assert evaluate(policy(REQUISITOS), "Edit", {"file_path": "docs/regras-de-negocio.md"}).allowed
     assert not evaluate(policy(REQUISITOS), "Write", {"file_path": "docs/adr/x.md"}).allowed
+    assert evaluate(policy(CODIGO), "Edit", {"file_path": "docs/regras-de-negocio.md"}).rule == "write_scope"
+
+
+def test_agents_can_run_the_ci_suite():
+    assert evaluate(policy(CODIGO), "Bash", {"command": "bash scripts/ci.sh catalog"}).allowed
+    assert evaluate(policy(TESTES), "Bash", {"command": "bash scripts/ci.sh catalog"}).allowed
 
 
 def test_testes_agent_cannot_change_production_code():
