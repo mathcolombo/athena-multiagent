@@ -1,9 +1,10 @@
 import json
 import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from orchestrator.agents import CODIGO, DEPLOY, REQUISITOS, TESTES, AgentSpec, policy_for
+from orchestrator.agents import BUSINESS_RULES, CODIGO, DEPLOY, REQUISITOS, TESTES, AgentSpec, policy_for
 from orchestrator.checks import (
     Task,
     changed_files,
@@ -151,6 +152,7 @@ class Supervisor:
             f"Crie testes automatizados para os critérios e cenários da task {task.id}.\n\n{context}",
         )
         await self._quality_checks(current_task_only=True)
+        await self._ensure_suite_passes()
         self._commit(f"feat({self.service}): {task.id} {task.title}")
         self.trace.emit("task_finished", task=task.id)
 
@@ -169,7 +171,10 @@ class Supervisor:
         for _ in range(MAX_REWORK_ROUNDS):
             self._phase("G3: aprovação da história")
             story = (self.worktree / self.story_path).read_text(encoding="utf-8")
-            decision = self._gate("G3", f"{self.worktree / self.story_path}\n\n{story}")
+            rules = self._rules_diff()
+            rules_section = f"\n\nAlteração proposta em {BUSINESS_RULES}:\n{rules}" if rules else ""
+            decision = self._gate("G3", f"{self.worktree / self.story_path}\n\n{story}{rules_section}")
+            self._record_g3_on_issue(decision)
             if decision.decision != "rejected":
                 return
             await self._agent(
@@ -177,6 +182,54 @@ class Supervisor:
                 f"O revisor reprovou a história em {self.story_path}. Ajuste conforme: {decision.comment}",
             )
         raise RunAborted("rejected", "História reprovada no G3 além do limite de rodadas")
+
+    def _rules_diff(self) -> str:
+        return run(["git", "diff", "--", BUSINESS_RULES], self.worktree).stdout.strip()
+
+    def _record_g3_on_issue(self, decision: GateDecision) -> None:
+        """Registra no card a saída do refinamento e a decisão humana, mesmo que a execução falhe depois."""
+        if not self.demand.issue:
+            return
+        outcome = {"approved": "aprovada", "edited": "aprovada com edição humana", "rejected": "reprovada"}
+        lines = [
+            f"### G3: história {outcome[decision.decision]}",
+            "",
+            f"- Aprovador: {decision.approver}",
+            f"- Execução: `{self.run_id}`",
+            f"- Esforço humano: {decision.human_minutes:.1f} min",
+        ]
+        if decision.comment:
+            lines.append(f"- Comentário: {decision.comment}")
+        if decision.decision != "rejected":
+            story = (self.worktree / self.story_path).read_text(encoding="utf-8")
+            lines += ["", f"<details open><summary>História e tasks (<code>{self.story_path}</code>)</summary>", "", story, "", "</details>"]
+            rules = self._rules_diff()
+            if rules:
+                lines += ["", f"<details><summary>Regras de negócio propostas (<code>{BUSINESS_RULES}</code>)</summary>", "", "```diff", rules, "```", "", "</details>"]
+        try:
+            self.platform.comment_issue(self.worktree, self.demand.issue, "\n".join(lines))
+            self.trace.emit("issue_commented", issue=self.demand.issue, gate="G3", decision=decision.decision)
+        except subprocess.CalledProcessError as error:
+            self._failure("registro", f"Não foi possível comentar na issue #{self.demand.issue}: {error.stderr}")
+
+    async def _ensure_suite_passes(self) -> None:
+        """Roda a mesma suíte da CI antes do commit, para teste vermelho não chegar ao PR."""
+        for attempt in range(1, MAX_REWORK_ROUNDS + 1):
+            result = run(["bash", "scripts/ci.sh", self.service], self.worktree, check=False)
+            passed = result.returncode == 0
+            log = (result.stdout + result.stderr)[-6000:]
+            self.trace.emit("suite_result", passed=passed, attempt=attempt, output="" if passed else log)
+            if passed:
+                return
+            self._failure("suite_vermelha", f"Suíte de testes falhou antes do commit (tentativa {attempt})")
+            spec = CODIGO if attempt % 2 else TESTES
+            await self._agent(
+                spec,
+                "A suíte de testes (`bash scripts/ci.sh`) falhou. Encontre a causa e corrija dentro da sua área, "
+                "sem enfraquecer testes válidos. Se a causa estiver fora da sua área, não contorne: explique-a.\n\n"
+                f"<log_testes>\n{log}\n</log_testes>\n\n{self.demand_block}",
+            )
+        raise RunAborted("aborted", "Suíte de testes continuou falhando antes do commit")
 
     async def _bug(self) -> str:
         self._record_coverage("before")
@@ -239,6 +292,7 @@ class Supervisor:
     async def _deliver(self, title: str, committed: bool = False) -> str:
         if not committed:
             await self._quality_checks()
+            await self._ensure_suite_passes()
             self._phase("Commit e pull request")
             self._commit(title)
         else:
@@ -267,11 +321,13 @@ class Supervisor:
             if result.passed:
                 return
             self._failure("ci_quebrado", f"CI falhou na tentativa {attempt}", log=result.log)
-            await self._agent(
+            fix = await self._agent(
                 CODIGO,
                 f"A CI falhou. Corrija a causa sem enfraquecer os testes.\n\n<log_ci>\n{result.log}\n</log_ci>",
             )
-            self._commit(f"fix({self.service}): corrige falha de CI")
+            if not self._commit(f"fix({self.service}): corrige falha de CI"):
+                self._failure("correcao_bloqueada", fix.text, agent="codigo")
+                raise RunAborted("aborted", "O agente de Código não conseguiu alterar nada para corrigir a CI")
             self.platform.push(self.worktree, self.branch)
         raise RunAborted("aborted", "CI continuou falhando após o limite de tentativas")
 
@@ -308,6 +364,7 @@ class Supervisor:
         if decision.rework_target in ("testes", "ambos"):
             await self._agent(TESTES, feedback)
         await self._quality_checks()
+        await self._ensure_suite_passes()
         self._commit(f"fix({self.service}): atende revisão do G5")
         self.platform.push(self.worktree, self.branch)
         await self._wait_ci(pull_request)

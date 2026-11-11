@@ -75,6 +75,10 @@ class ConsoleLog:
                 return f"   verificações de qualidade: {ok if r['passed'] else fail + ' ' + '; '.join(r['problems'])}"
             case "regression_check":
                 return f"   teste de regressão falha sem a correção: {ok if r['failed_on_base'] else fail}"
+            case "suite_result":
+                return f"   suíte de testes (tentativa {r['attempt']}): {ok + ' verde' if r['passed'] else fail + ' falhou'}"
+            case "issue_commented":
+                return f"   {ok} decisão do {r['gate']} registrada na issue #{r['issue']}"
             case "pr_opened":
                 return f"   PR aberto: {r['url']}"
             case "ci_result":

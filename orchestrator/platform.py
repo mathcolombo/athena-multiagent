@@ -49,6 +49,8 @@ class Platform(Protocol):
 
     def tag_release(self, worktree: Path, tag: str) -> None: ...
 
+    def comment_issue(self, worktree: Path, number: int, body: str) -> None: ...
+
 
 class GitHubPlatform:
     name = "github"
@@ -114,6 +116,12 @@ class GitHubPlatform:
         run(["git", "tag", tag], worktree)
         run(["git", "push", "origin", tag], worktree)
 
+    def comment_issue(self, worktree: Path, number: int, body: str) -> None:
+        body_file = worktree / ".pilot" / "issue_comment.md"
+        body_file.parent.mkdir(exist_ok=True)
+        body_file.write_text(body, encoding="utf-8")
+        run(["gh", "issue", "comment", str(number), "--body-file", str(body_file)], worktree)
+
 
 class LocalPlatform:
     """Ensaio sem GitHub: branch local como base e CI executada na máquina."""
@@ -152,3 +160,6 @@ class LocalPlatform:
 
     def tag_release(self, worktree: Path, tag: str) -> None:
         run(["git", "tag", f"rehearsal-{tag}"], worktree)
+
+    def comment_issue(self, worktree: Path, number: int, body: str) -> None:
+        """Ensaios não escrevem no card real."""

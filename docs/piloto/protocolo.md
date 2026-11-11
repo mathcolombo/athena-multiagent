@@ -24,9 +24,9 @@ Cada fluxo é um serviço com dois ciclos completos. A entrada de cada execuçã
 
 ### Refinamento em tasks (ciclo de funcionalidade)
 
-O Agente de Requisitos e Refinamento escreve a história em `docs/backlog/<ID>.md` com regra, cenários BDD e uma seção `## Tasks`, com 1 a 6 tasks `### T<n>: <título>`. Cada task traz `Cenários:`, `Arquivos:` e `Pronto quando:`. O supervisor rejeita a história se faltar algum desses elementos. No G3 são aprovadas a história e a quebra em tasks.
+O Agente de Requisitos e Refinamento escreve a história em `docs/backlog/<ID>.md` com regra, cenários BDD e uma seção `## Tasks`, com 1 a 6 tasks `### T<n>: <título>`. Cada task traz `Cenários:`, `Arquivos:` e `Pronto quando:`. O supervisor rejeita a história se faltar algum desses elementos. Regras de negócio novas são propostas pelo mesmo agente em `docs/regras-de-negocio.md`. No G3 são aprovadas a história, a quebra em tasks e as regras novas. Cada decisão do G3 é registrada como comentário na issue, com aprovador, comentário, história e regras propostas. O registro fica no card mesmo que a execução falhe depois.
 
-Depois do G3, cada task é executada em sequência: o Agente de Código implementa só aquela task, o Agente de Testes cobre seus cenários, as verificações de qualidade rodam e o supervisor faz um commit próprio para a task. Ao fim das tasks, sai um único PR, com uma CI e um G5 para a história inteira. Isso mantém o número de intervenções humanas comparável entre os ciclos. O trace registra `tasks_planned`, `task_started` e `task_finished`.
+Depois do G3, cada task é executada em sequência: o Agente de Código implementa só aquela task, o Agente de Testes cobre seus cenários, as verificações de qualidade e a suíte da CI (`scripts/ci.sh`) rodam, e o supervisor faz um commit próprio para a task. Se a suíte falhar, o log volta alternadamente para o Agente de Código e para o de Testes, até 3 tentativas. Ao fim das tasks, sai um único PR, com uma CI e um G5 para a história inteira. Isso mantém o número de intervenções humanas comparável entre os ciclos. O trace registra `tasks_planned`, `task_started` e `task_finished`.
 
 O ciclo de bug não passa por refinamento.
 
@@ -34,9 +34,9 @@ O ciclo de bug não passa por refinamento.
 
 | Agente | Atividades | Escrita | Comandos | Turnos | Orçamento (US$) |
 |---|---|---|---|---:|---:|
-| Requisitos e refinamento | 2, 3 | `docs/backlog/` | nenhum | 20 | 1,50 |
-| Código | 6, 7 | serviço do fluxo, `libs/events/` e `web/public/` (exceto testes e, sem seção Interface, `styles.css`); `.pilot/repro/` | pytest, node --test, git somente leitura | 50 | 4,00 |
-| Testes | 8, 10 | `tests/` do serviço e de `libs/events/`; `web/tests/` | pytest, node --test, git somente leitura | 40 | 3,00 |
+| Requisitos e refinamento | 2, 3 | `docs/backlog/` e `docs/regras-de-negocio.md` (só regras novas) | nenhum | 20 | 1,50 |
+| Código | 6, 7 | serviço do fluxo, `libs/events/` e `web/public/` (exceto testes e, sem seção Interface, `styles.css`); `.pilot/repro/` | pytest, node --test, `scripts/ci.sh`, git somente leitura | 50 | 4,00 |
+| Testes | 8, 10 | `tests/` do serviço e de `libs/events/`; `web/tests/` | pytest, node --test, `scripts/ci.sh`, git somente leitura | 40 | 3,00 |
 | Deploy | 11, 12 | `.pilot/deploy_report.md` | scripts de homologação, compose ps/logs | 20 | 1,00 |
 
 ## Guarda-corpos
@@ -77,6 +77,9 @@ Limitação conhecida: o agente de Deploy roda sem sandbox, pois precisa do Dock
 | `outra` | Humano, ao reprovar |
 | `criterio_aceitacao` | Automática: história ou relatório fora do padrão |
 | `ci_quebrado` | Automática |
+| `suite_vermelha` | Automática: suíte local falhou antes do commit |
+| `correcao_bloqueada` | Automática: o agente não conseguiu alterar nada para corrigir a CI |
+| `registro` | Automática: falha ao comentar na issue |
 | `limite_execucao` | Automática: turnos ou orçamento |
 | `erro_agente` | Automática |
 | `violacao_escopo` | Automática |

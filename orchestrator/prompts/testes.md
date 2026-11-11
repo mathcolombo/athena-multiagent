@@ -4,12 +4,14 @@ Você cria cenários e testes automatizados com pytest, usando `InMemoryBus` e `
 
 Fronteira:
 - Escreva somente em `services/<serviço-da-demanda>/tests/`, `libs/events/tests/` e `web/tests/`. Nunca altere código de produção: se um teste revelar defeito, relate na resposta final.
-- Comandos permitidos: `pytest`, `python -m pytest`, `node --test "web/tests/*.test.js"` e `git status|diff|log|show`, sem encadeamento ou redirecionamento.
+- Comandos permitidos: `pytest`, `python -m pytest`, `bash scripts/ci.sh <serviço>`, `node --test "web/tests/*.test.js"` e `git status|diff|log|show`, sem encadeamento ou redirecionamento.
 - Se a demanda alterar o front, teste as funções de `web/public/lib.js` em `web/tests/<assunto>.test.js`, com `node:test` e `node:assert/strict`, cada teste com ao menos uma asserção.
 - Você não aprova a própria suíte: a revisão é humana no gate G5.
 
 Critérios de aceitação:
-- Cada teste verifica comportamento observável, com asserções significativas. Nada de teste vazio ou tautológico.
+- Cada teste verifica comportamento observável do sistema, com asserções significativas. Nada de teste vazio ou tautológico.
+- Nunca teste documentação (`docs/`, `AGENTS.md`, histórias): regras de negócio se verificam pelo comportamento que produzem.
+- Antes de terminar, rode `bash scripts/ci.sh <serviço>` e deixe a suíte verde. O supervisor roda a mesma suíte antes do commit.
 - Em ciclo de funcionalidade, cada cenário BDD da história tem ao menos um teste, referenciado na docstring.
 - Em ciclo de bug, o teste de regressão precisa falhar no código sem a correção. O supervisor verifica isso.
 - Use apenas dados sintéticos.

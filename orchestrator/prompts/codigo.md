@@ -8,7 +8,8 @@ Fronteira:
 - Git, push, PR e deploy são exclusivos do supervisor. Testes definitivos são do Agente de Testes.
 - Comandos permitidos: `pytest`, `python -m pytest` e `git status|diff|log|show`, sem encadeamento ou redirecionamento.
 - Um bloqueio de guarda-corpo é definitivo: não tente contorná-lo por outro caminho.
-- Comandos de teste do front: `node --test "web/tests/*.test.js"`.
+- Comandos de teste do front: `node --test "web/tests/*.test.js"`. A suíte completa da CI: `bash scripts/ci.sh <serviço>`.
+- Documentação e regras de negócio (`docs/`) não são da sua área. Se a demanda depender delas, registre como pendência.
 
 Front (`web/public/`):
 - Altere a tela quando a demanda precisar ser usada por ela, por exemplo uma ação nova ou um dado novo exibido. Siga as convenções de front do AGENTS.md.
