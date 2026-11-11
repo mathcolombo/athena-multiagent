@@ -26,5 +26,6 @@ th { color: var(--muted); font-weight: 500; font-size: 13px; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .muted { color: var(--muted); font-size: 13px; }
 .status-CONFIRMED { color: var(--ok); } .status-PENDING { color: var(--warn); } .status-REJECTED, .status-CANCELLED { color: var(--err); }
+.low-stock { color: var(--warn); }
 #toast { position: fixed; bottom: 16px; left: 16px; right: 16px; max-width: 480px; padding: 10px 14px; border-radius: 6px; background: var(--text); color: var(--bg); display: none; }
 .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }

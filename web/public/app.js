@@ -5,9 +5,12 @@ import {
   nextQuantity,
   orderStatusClass,
   parseMoneyToCents,
+  parseLimit,
   parseQuantity,
+  productBody,
   requestInit,
   shortId,
+  stockClass,
 } from "./lib.js";
 
 const $ = id => document.getElementById(id);
@@ -53,13 +56,14 @@ async function loadProducts() {
   body.replaceChildren();
   for (const product of products) {
     const row = document.createElement("tr");
-    row.append(cell(product.name), cell(money(product.price_cents), "num"), cell(product.stock, "num"));
+    row.append(cell(product.name), cell(money(product.price_cents), "num"), cell(product.stock, `num ${stockClass(product)}`.trim()));
     const actions = document.createElement("td");
     actions.className = "row-actions";
     actions.append(
       button("Adicionar", () => addToCart(product.id)),
       button("Alterar preço", () => changePrice(product)),
       button("Estoque", () => changeStock(product)),
+      button("Limite", () => changeLimit(product)),
     );
     row.append(actions);
     body.append(row);
@@ -151,6 +155,17 @@ async function changeStock(product) {
   } catch (error) { toast(error.message); }
 }
 
+async function changeLimit(product) {
+  const answer = prompt(`Novo limite de estoque baixo de ${product.name} (vazio remove o limite)`, product.low_stock_threshold ?? "");
+  if (answer === null) return;
+  const limit = parseLimit(answer);
+  if (Number.isNaN(limit)) return toast("Limite inválido. Use um número inteiro ou deixe vazio.");
+  try {
+    await api("catalog", `/products/${product.id}`, { method: "PATCH", body: { low_stock_threshold: limit } });
+    await loadProducts();
+  } catch (error) { toast(error.message); }
+}
+
 async function refresh() {
   await Promise.all([loadProducts(), loadCart(), loadOrders()]).catch(error => toast(error.message));
 }
@@ -160,11 +175,13 @@ $("product-form").addEventListener("submit", async event => {
   const form = new FormData(event.target);
   const priceCents = parseMoneyToCents(form.get("price"));
   const stock = parseQuantity(form.get("stock"));
+  const limit = parseLimit(form.get("limit"));
   if (Number.isNaN(priceCents) || Number.isNaN(stock)) return toast("Informe preço (ex.: 149,90) e estoque inteiro.");
+  if (Number.isNaN(limit)) return toast("Limite inválido. Use um número inteiro ou deixe vazio.");
   try {
     await api("catalog", "/products", {
       method: "POST",
-      body: { name: form.get("name"), price_cents: priceCents, stock },
+      body: productBody({ name: form.get("name"), priceCents, stock, limit }),
     });
     event.target.reset();
     await loadProducts();

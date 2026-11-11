@@ -19,6 +19,22 @@ export function parseQuantity(text) {
   return Number.isInteger(value) && value >= 0 ? value : NaN;
 }
 
+/** Limite de estoque baixo: vazio vira null (sem limite); inteiro >= 0 é válido; o resto é NaN. */
+export function parseLimit(text) {
+  const raw = String(text ?? "").trim();
+  return raw === "" ? null : parseQuantity(raw);
+}
+
+export function productBody({ name, priceCents, stock, limit }) {
+  const body = { name, price_cents: priceCents, stock };
+  if (limit !== null && limit !== undefined) body.low_stock_threshold = limit;
+  return body;
+}
+
+export function stockClass(product) {
+  return product.low_stock ? "low-stock" : "";
+}
+
 export function shortId(id) {
   return String(id).slice(0, 8);
 }
