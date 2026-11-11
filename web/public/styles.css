@@ -1,0 +1,30 @@
+:root {
+  --bg: #f6f7f9; --surface: #fff; --text: #1d2330; --muted: #5f6b7a; --border: #dde1e7;
+  --accent: #2f5bd3; --ok: #1f7a4d; --warn: #9a6200; --err: #b3261e;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #14171c; --surface: #1d2128; --text: #e6e9ee; --muted: #9aa4b2; --border: #2e343d;
+    --accent: #7c9cf0; --ok: #5cc28f; --warn: #e0a84a; --err: #f08a82; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--text); }
+header { padding: 16px; border-bottom: 1px solid var(--border); display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+header h1 { font-size: 18px; margin: 0; }
+header label { color: var(--muted); }
+main { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; padding: 16px; }
+section { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; min-width: 0; }
+h2 { font-size: 16px; margin: 0 0 12px; }
+form { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+input { font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); min-width: 0; }
+input.qty { width: 64px; }
+input.money { width: 100px; }
+button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+button.ghost { background: transparent; color: var(--accent); }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+th { color: var(--muted); font-weight: 500; font-size: 13px; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); font-size: 13px; }
+.status-CONFIRMED { color: var(--ok); } .status-PENDING { color: var(--warn); } .status-REJECTED, .status-CANCELLED { color: var(--err); }
+#toast { position: fixed; bottom: 16px; left: 16px; right: 16px; max-width: 480px; padding: 10px 14px; border-radius: 6px; background: var(--text); color: var(--bg); display: none; }
+.row-actions { display: flex; gap: 6px; flex-wrap: wrap; }

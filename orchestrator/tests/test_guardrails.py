@@ -91,3 +91,33 @@ def test_out_of_scope_lists_files_no_agent_may_write():
     policies = [policy(spec) for spec in (REQUISITOS, CODIGO, TESTES)]
 
     assert out_of_scope(policies, ["services/catalog/catalog_service/app.py", "services/cart/x.py"]) == ["services/cart/x.py"]
+
+
+def test_front_code_and_tests_are_in_scope():
+    assert evaluate(policy(CODIGO), "Edit", {"file_path": "web/public/app.js"}).allowed
+    assert evaluate(policy(TESTES), "Write", {"file_path": "web/tests/cancel.test.js"}).allowed
+    assert evaluate(policy(CODIGO), "Write", {"file_path": "web/tests/x.test.js"}).rule == "write_scope"
+    assert evaluate(policy(TESTES), "Edit", {"file_path": "web/public/lib.js"}).rule == "write_scope"
+    assert evaluate(policy(CODIGO), "Edit", {"file_path": "web/nginx.conf"}).rule == "write_scope"
+
+
+def test_styles_require_interface_section():
+    without_interface = policy_for(CODIGO, "catalog", WORKTREE)
+    with_interface = policy_for(CODIGO, "catalog", WORKTREE, visual_changes=True)
+
+    assert evaluate(without_interface, "Edit", {"file_path": "web/public/styles.css"}).rule == "write_scope"
+    assert evaluate(with_interface, "Edit", {"file_path": "web/public/styles.css"}).allowed
+
+
+@pytest.mark.parametrize(
+    "command, allowed",
+    [
+        ('node --test "web/tests/*.test.js"', True),
+        ("node --test web/tests/lib.test.js", True),
+        ("node -e 1", False),
+        ("node --test --import=./evil.js web/tests", False),
+        ("node web/public/app.js", False),
+    ],
+)
+def test_node_commands(command, allowed):
+    assert evaluate(policy(TESTES), "Bash", {"command": command}).allowed is allowed

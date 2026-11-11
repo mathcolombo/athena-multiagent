@@ -18,6 +18,9 @@ jobs:
           python-version: "3.14"
           cache: pip
           cache-dependency-path: requirements/*.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
       - run: pip install -r requirements/orchestrator.txt
       - name: Selecionar serviços alterados
         id: select
@@ -42,5 +45,7 @@ jobs:
           for service in $SERVICES; do
             bash scripts/ci.sh "$service"
           done
+      - name: Testes do front
+        run: node --test "web/tests/*.test.js"
       - name: Testes do orquestrador
         run: pytest orchestrator/tests -q

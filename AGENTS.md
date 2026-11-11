@@ -11,7 +11,7 @@ Sistema de e-commerce da Skynet Tech, em monorepo orientado a eventos. Este arqu
 | `services/orders` | Pedidos e saga de confirmação |
 | `libs/events` | Envelope, contratos Pydantic e barramentos (RabbitMQ e memória) |
 | `orchestrator` | Supervisor do processo guiado por agentes (fora do escopo dos agentes) |
-| `web` | Front de homologação servido por nginx, com proxy `/api/<serviço>/` (fora do escopo dos agentes) |
+| `web` | Front servido por nginx, com proxy `/api/<serviço>/`; código em `web/public/`, testes em `web/tests/` |
 
 Decisões registradas em `docs/adr/`. Regras em `docs/regras-de-negocio.md`. Termos em `docs/glossario.md`.
 
@@ -29,12 +29,21 @@ Saga de pedido: `cart.checked_out` → `order.created` → `stock.reserved` ou `
 - `app.py` expõe `create_app(database_path, bus)`; `main.py` só faz a composição com o RabbitMQ.
 - Rotas são `async def` para serializar o acesso ao SQLite no event loop.
 
+## Front
+
+- JavaScript puro em módulos ES, sem build e sem dependências. `index.html` (estrutura), `styles.css` (visual), `app.js` (eventos e DOM) e `lib.js` (funções puras testáveis).
+- Chamadas à API sempre por `/api/<serviço>/<rota>` usando `api()` de `app.js`. Nunca acesse as portas dos serviços diretamente.
+- Textos ao usuário em português; valores em centavos formatados com `formatMoney`; entrada de dinheiro com `parseMoneyToCents`.
+- Monte o DOM com `textContent`/`createElement`, nunca com `innerHTML` contendo dados da API.
+- Decisões visuais (layout, cores, tipografia, novos componentes e `styles.css`) são da equipe técnica e só entram quando descritas na seção Interface da issue.
+
 ## Comandos
 
 ```bash
 pytest services/<serviço>/tests --cov=<serviço>_service
 pytest libs/events/tests
 bash scripts/ci.sh <serviço>
+node --test "web/tests/*.test.js"
 ```
 
 ## Testes

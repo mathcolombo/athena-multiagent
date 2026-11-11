@@ -10,6 +10,8 @@ from orchestrator.config import MAX_TASKS
 from orchestrator.platform import run
 
 COVERAGE_LINE = re.compile(r"^TOTAL\s+\d+\s+\d+\s+(\d+)%", re.MULTILINE)
+JS_TEST_CALL = re.compile(r"^\s*(?:test|it)\(\s*([\"'`])(.+?)\1", re.MULTILINE)
+JS_ASSERTION = re.compile(r"\bassert(\.\w+)?\(|\bexpect\(")
 TASK_HEADING = re.compile(r"^###\s+(T\d+):\s*(.+?)\s*$", re.MULTILINE)
 NEXT_SECTION = re.compile(r"^##\s", re.MULTILINE)
 PYTEST_TESTS_FAILED = 1
@@ -66,12 +68,37 @@ def story_problems(path: Path) -> list[str]:
     return problems
 
 
+def is_python_test(path: str) -> bool:
+    return "/tests/" in path and Path(path).name.startswith("test_") and path.endswith(".py")
+
+
+def is_js_test(path: str) -> bool:
+    return path.startswith("web/tests/") and path.endswith(".test.js")
+
+
+def is_test_file(path: str) -> bool:
+    return is_python_test(path) or is_js_test(path)
+
+
+def js_tests_without_assertions(source: str) -> list[str]:
+    calls = list(JS_TEST_CALL.finditer(source))
+    empty = []
+    for index, call in enumerate(calls):
+        end = calls[index + 1].start() if index + 1 < len(calls) else len(source)
+        if not JS_ASSERTION.search(source[call.end():end]):
+            empty.append(call.group(2))
+    return empty
+
+
 def tests_without_assertions(worktree: Path, files: list[str]) -> list[str]:
     """Critério 'sem asserções vazias' da seção 2.2."""
     empty = []
     for name in files:
         path = worktree / name
-        if not (path.exists() and path.name.startswith("test_") and path.suffix == ".py"):
+        if path.exists() and is_js_test(name):
+            empty += [f"{name}::{title}" for title in js_tests_without_assertions(path.read_text(encoding="utf-8"))]
+            continue
+        if not (path.exists() and is_python_test(name)):
             continue
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name.startswith("test_"):
@@ -103,7 +130,17 @@ def regression_fails_without_fix(worktree: Path, base_ref: str, test_files: list
                 target = checkout / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(worktree / name, target)
-            result: subprocess.CompletedProcess[str] = run(["pytest", *test_files, "-q", "--no-header"], checkout, check=False)
-            return result.returncode == PYTEST_TESTS_FAILED, result.stdout[-4000:]
+            python_tests = [name for name in test_files if is_python_test(name)]
+            js_tests = [name for name in test_files if is_js_test(name)]
+            failed, output = False, ""
+            if python_tests:
+                result: subprocess.CompletedProcess[str] = run(["pytest", *python_tests, "-q", "--no-header"], checkout, check=False)
+                failed |= result.returncode == PYTEST_TESTS_FAILED
+                output += result.stdout[-3000:]
+            if js_tests:
+                result = run(["node", "--test", *js_tests], checkout, check=False)
+                failed |= result.returncode != 0
+                output += result.stdout[-3000:]
+            return failed, output
         finally:
             run(["git", "worktree", "remove", "--force", str(checkout)], worktree, check=False)

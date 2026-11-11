@@ -29,6 +29,15 @@ def test_issue_becomes_demand_with_only_the_demand_section():
     assert demand.body == "Clientes querem cancelar pedidos."
 
 
+def test_interface_section_is_optional_and_kept_apart():
+    without = demand_from_issue(issue())
+    with_interface = demand_from_issue(issue(body="## Demanda\n\nTexto.\n\n## Interface\n\nBotão vermelho na linha do pedido.\n"))
+
+    assert without.interface is None
+    assert with_interface.interface == "Botão vermelho na linha do pedido."
+    assert with_interface.body == "Texto."
+
+
 def test_issue_without_id_in_title_uses_issue_number():
     demand = demand_from_issue(issue(title="Nova demanda"))
 

@@ -18,6 +18,7 @@ PRODUCTION_TOKENS = {"prod", "production", "producao", "--prod", "--production"}
 DANGEROUS_OPTIONS = {
     "pytest": ("-p", "-c", "-o", "--rootdir", "--override-ini", "--confcutdir", "--basetemp"),
     "git": ("--output", "--no-index", "--ext-diff", "--exec-path", "-c"),
+    "node": ("-e", "-p", "-r", "--eval", "--print", "--require", "--import", "--loader", "--experimental-loader", "--inspect"),
 }
 SECRET_NAMES = {"id_rsa", "id_ed25519", "credentials.json", ".netrc", ".npmrc", ".pypirc"}
 SECRET_SUFFIXES = {".pem", ".key", ".p12", ".pfx"}

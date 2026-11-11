@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skynet Loja</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1>Skynet Loja (homologação)</h1>
+  <label>Cliente <input id="customer" value="cliente-demo"></label>
+  <button class="ghost" id="refresh">Atualizar tudo</button>
+</header>
+<main>
+  <section>
+    <h2>Catálogo</h2>
+    <form id="product-form">
+      <input name="name" placeholder="Nome" required>
+      <input name="price" class="money" placeholder="Preço (R$)" inputmode="decimal" required>
+      <input name="stock" class="qty" placeholder="Estoque" inputmode="numeric" required>
+      <button>Cadastrar</button>
+    </form>
+    <table>
+      <thead><tr><th>Produto</th><th class="num">Preço</th><th class="num">Estoque</th><th></th></tr></thead>
+      <tbody id="products"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Carrinho</h2>
+    <p class="muted" id="cart-info">Nenhum carrinho aberto.</p>
+    <table>
+      <thead><tr><th>Item</th><th class="num">Qtd.</th><th class="num">Unitário</th><th></th></tr></thead>
+      <tbody id="cart-items"></tbody>
+    </table>
+    <p><strong>Total: <span id="cart-total">R$ 0,00</span></strong></p>
+    <div class="row-actions">
+      <button id="checkout">Finalizar compra</button>
+      <button class="ghost" id="new-cart">Novo carrinho</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Pedidos</h2>
+    <p class="muted">Os pedidos são criados por eventos, então podem levar alguns segundos para aparecer e mudar de status.</p>
+    <table>
+      <thead><tr><th>Pedido</th><th>Status</th><th class="num">Total</th></tr></thead>
+      <tbody id="orders"></tbody>
+    </table>
+  </section>
+</main>
+<div id="toast" role="status"></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
