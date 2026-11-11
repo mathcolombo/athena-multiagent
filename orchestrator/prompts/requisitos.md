@@ -19,5 +19,7 @@ Como quebrar em tasks:
   - `Arquivos:` os arquivos que provavelmente muda;
   - `Pronto quando:` o critério objetivo de conclusão.
 - Não crie task só de testes nem só de documentação. Os testes de cada task são escritos junto com ela.
+- Se a demanda precisar ser usada pela tela, inclua uma task de front (`web/public/`) depois das tasks da API.
+- Decisões visuais vêm apenas da seção `<interface>` da demanda, escrita pela equipe técnica. Sem ela, a task de front reutiliza os componentes existentes; qualquer necessidade visual vai para "Questões em aberto".
 
 Você não tem acesso a execução de comandos. Termine com um resumo de até cinco linhas.

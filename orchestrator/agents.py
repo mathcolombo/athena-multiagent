@@ -7,6 +7,7 @@ from orchestrator.guardrails import Policy
 READ_TOOLS = ("Read", "Glob", "Grep")
 TEST_COMMANDS = (
     ("pytest",),
+    ("node", "--test"),
     ("python", "-m", "pytest"),
     ("git", "status"),
     ("git", "diff"),
@@ -48,18 +49,25 @@ TESTES = AgentSpec("testes", "testes.md", (*READ_TOOLS, "Write", "Edit", "Bash")
 DEPLOY = AgentSpec("deploy", "deploy.md", (*READ_TOOLS, "Write", "Bash"), 20, 1.0, False)
 
 
-def policy_for(spec: AgentSpec, service: str, worktree: Path) -> Policy:
+WEB_CODE = "web/public/"
+WEB_TESTS = "web/tests/"
+WEB_STYLES = "web/public/styles.css"
+
+
+def policy_for(spec: AgentSpec, service: str, worktree: Path, visual_changes: bool = False) -> Policy:
+    """`visual_changes` só é verdadeiro quando a issue traz decisões visuais da equipe na seção Interface."""
     service_dir = f"services/{service}/"
     service_tests = f"{service_dir}tests/"
     events_tests = "libs/events/tests/"
+    styles = () if visual_changes else (WEB_STYLES,)
     scopes: dict[str, dict] = {
         "requisitos": {"writable": ("docs/backlog/",)},
         "codigo": {
-            "writable": (service_dir, "libs/events/", ".pilot/repro/"),
-            "write_excluded": (service_tests, events_tests),
+            "writable": (service_dir, "libs/events/", WEB_CODE, ".pilot/repro/"),
+            "write_excluded": (service_tests, events_tests, *styles),
             "commands": TEST_COMMANDS,
         },
-        "testes": {"writable": (service_tests, events_tests), "commands": TEST_COMMANDS},
+        "testes": {"writable": (service_tests, events_tests, WEB_TESTS), "commands": TEST_COMMANDS},
         "deploy": {"writable": (".pilot/deploy_report.md",), "commands": DEPLOY_COMMANDS},
     }
     return Policy(agent=spec.name, worktree=worktree, tools=spec.tools, **scopes[spec.name])

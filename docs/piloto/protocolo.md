@@ -18,7 +18,7 @@ Cada fluxo é um serviço com dois ciclos completos. A entrada de cada execuçã
 
 - O orquestrador só aceita issues **abertas** com o rótulo `piloto`, exatamente um rótulo `fluxo:<catalog|cart|orders>` e um `ciclo:<feature|bug|guardrail>`. Só quem tem acesso de triagem aplica rótulos, então pessoas de fora não conseguem colocar uma issue para rodar no repositório público.
 - O título no formato `[ID] título` define o identificador da demanda. Sem isso, o identificador é `ISSUE-<número>`.
-- Só a seção `## Demanda` do corpo vai para os agentes, sempre marcada como dado não confiável. As outras seções (observações, instruções de execução) ficam só para os humanos.
+- As seções `## Demanda` e, se existir, `## Interface` vão para os agentes, sempre marcadas como dado não confiável. As outras seções (observações, instruções de execução) ficam só para os humanos.
 - O PR inclui `Closes #N`, então o merge no G5 fecha a issue. A issue do GRD-01 é fechada manualmente depois da execução.
 - Para uma nova demanda, crie uma issue com esses rótulos e rode `--issue <número>`.
 
@@ -35,8 +35,8 @@ O ciclo de bug não passa por refinamento.
 | Agente | Atividades | Escrita | Comandos | Turnos | Orçamento (US$) |
 |---|---|---|---|---:|---:|
 | Requisitos e refinamento | 2, 3 | `docs/backlog/` | nenhum | 20 | 1,50 |
-| Código | 6, 7 | serviço do fluxo e `libs/events/`, exceto `tests/`; `.pilot/repro/` | pytest, git somente leitura | 50 | 4,00 |
-| Testes | 8, 10 | `tests/` do serviço e de `libs/events/` | pytest, git somente leitura | 40 | 3,00 |
+| Código | 6, 7 | serviço do fluxo, `libs/events/` e `web/public/` (exceto testes e, sem seção Interface, `styles.css`); `.pilot/repro/` | pytest, node --test, git somente leitura | 50 | 4,00 |
+| Testes | 8, 10 | `tests/` do serviço e de `libs/events/`; `web/tests/` | pytest, node --test, git somente leitura | 40 | 3,00 |
 | Deploy | 11, 12 | `.pilot/deploy_report.md` | scripts de homologação, compose ps/logs | 20 | 1,00 |
 
 ## Guarda-corpos
@@ -110,9 +110,15 @@ No G5, revise o PR no GitHub e faça o merge antes de responder `a` no terminal.
 .venv/bin/python -m orchestrator report
 ```
 
-## Front de homologação
+## Front
 
-Durante o G7, a homologação fica no ar em http://localhost:8080 para o aprovador conferir o comportamento antes de autorizar a virada. Com a virada autorizada, o ambiente continua no ar com a versão liberada, simulando produção. No rollback, ele é derrubado. O front está fora do escopo dos agentes; funcionalidades novas sem tela, como o cancelamento de pedido, são conferidas pelas APIs em `/docs`.
+O front (`web/`) faz parte do escopo dos agentes como **código** (atividade 6): quando a demanda precisa ser usada pela tela, o agente de Código implementa a interação em `web/public/` e o agente de Testes cobre a lógica de `lib.js` com `node --test`. O **design de interface** (atividade 5) continua com a equipe técnica:
+
+- Decisões visuais (layout, cores, tipografia, componentes novos) só entram quando descritas na seção `## Interface` da issue.
+- Sem essa seção, o guarda-corpo bloqueia a escrita em `web/public/styles.css` e os agentes são instruídos a reutilizar os elementos existentes, registrando necessidades visuais como pendência.
+- Como os agentes não enxergam a tela, o aprovador do G7 confere a interface em http://localhost:8080 antes de autorizar a virada.
+
+Durante o G7, a homologação fica no ar. Com a virada autorizada, o ambiente continua no ar com a versão liberada, simulando produção. No rollback, ele é derrubado.
 
 ## Papéis nos gates
 

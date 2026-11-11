@@ -9,6 +9,7 @@ CYCLES = ("feature", "bug", "guardrail")
 PILOT_LABEL = "piloto"
 TITLE_WITH_ID = re.compile(r"^\[([A-Z0-9-]+)\]\s*(.+)$")
 DEMAND_SECTION = re.compile(r"^## Demanda[ \t]*\n(.*?)(?=^## |\Z)", re.MULTILINE | re.DOTALL)
+INTERFACE_SECTION = re.compile(r"^## Interface[ \t]*\n(.*?)(?=^## |\Z)", re.MULTILINE | re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,7 @@ class Demand:
     title: str
     body: str
     issue: int | None = None
+    interface: str | None = None
 
 
 class InvalidIssue(ValueError):
@@ -47,7 +49,11 @@ def demand_from_issue(issue: dict) -> Demand:
     if not body:
         raise InvalidIssue(f"a issue #{issue['number']} não tem descrição da demanda")
 
+    interface_section = INTERFACE_SECTION.search(issue["body"])
+    interface = interface_section.group(1).strip() if interface_section else ""
+
     return Demand(
+        interface=interface or None,
         id=demand_id,
         flow=_single_label(labels, "fluxo:", SERVICES),
         cycle=_single_label(labels, "ciclo:", CYCLES),

@@ -74,7 +74,7 @@ class FakeRunner:
         self.prompts = []
         self.errors = {}
 
-    async def __call__(self, spec, prompt, service, worktree):
+    async def __call__(self, spec, prompt, service, worktree, visual_changes=False):
         self.calls.append(spec.name)
         self.prompts.append(prompt)
         n = self.calls.count(spec.name)
@@ -138,7 +138,7 @@ async def test_feature_commits_each_task_separately(repo, tmp_path_factory):
 
 async def test_story_without_tasks_goes_back_to_refinement(repo, tmp_path_factory):
     class NoTasks(FakeRunner):
-        async def __call__(self, spec, prompt, service, worktree):
+        async def __call__(self, spec, prompt, service, worktree, visual_changes=False):
             result = await super().__call__(spec, prompt, service, worktree)
             if spec.name == "requisitos":
                 (worktree / "docs/backlog/D-1.md").write_text("Regra: RN-01\nCenário: ok\n")
@@ -178,6 +178,15 @@ async def test_g5_waits_for_merge_without_new_gate_decision(repo, tmp_path_facto
     assert [e["gate"] for e in events(trace, "gate_decision")] == ["G3", "G5", "G7"]
     assert len(events(trace, "merge_pending")) == 2
     assert not events(trace, "failure")
+
+
+def test_visual_decisions_follow_interface_section(repo, tmp_path_factory):
+    supervisor, _, _, _ = build(repo, tmp_path_factory)
+    assert "sem alterar layout" in supervisor.demand_block
+
+    supervisor.demand = Demand("D-1", "catalog", "feature", "t", "corpo", interface="Ícone de alerta ao lado do estoque")
+    assert "<interface>\nÍcone de alerta ao lado do estoque\n</interface>" in supervisor.demand_block
+    assert "sem alterar layout" not in supervisor.demand_block
 
 
 async def test_bug_cycle_skips_requirements(repo, tmp_path_factory):
@@ -249,7 +258,7 @@ async def test_budget_exhaustion_aborts_with_category(repo, tmp_path_factory):
 
 async def test_out_of_scope_file_blocks_commit(repo, tmp_path_factory):
     class Rogue(FakeRunner):
-        async def __call__(self, spec, prompt, service, worktree):
+        async def __call__(self, spec, prompt, service, worktree, visual_changes=False):
             result = await super().__call__(spec, prompt, service, worktree)
             if spec.name == "testes":
                 (worktree / "scripts/rogue.sh").write_text("x")

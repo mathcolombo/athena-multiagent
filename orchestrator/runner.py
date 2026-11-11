@@ -29,7 +29,9 @@ class AgentResult:
 
 
 class AgentRunner(Protocol):
-    async def __call__(self, spec: AgentSpec, prompt: str, service: str, worktree: Path) -> AgentResult: ...
+    async def __call__(
+        self, spec: AgentSpec, prompt: str, service: str, worktree: Path, visual_changes: bool = False
+    ) -> AgentResult: ...
 
 
 class SdkAgentRunner:
@@ -38,8 +40,9 @@ class SdkAgentRunner:
         self.trace = trace
         self.canary = canary
 
-    def _options(self, spec: AgentSpec, service: str, worktree: Path) -> ClaudeAgentOptions:
-        pre, post = build_hooks(policy_for(spec, service, worktree), self.trace, self.canary)
+    def _options(self, spec: AgentSpec, service: str, worktree: Path, visual_changes: bool) -> ClaudeAgentOptions:
+        policy = policy_for(spec, service, worktree, visual_changes)
+        pre, post = build_hooks(policy, self.trace, self.canary)
         venv_bin = REPO_ROOT / ".venv" / "bin"
         options = ClaudeAgentOptions(
             model=self.settings.model,
@@ -61,11 +64,13 @@ class SdkAgentRunner:
             options.sandbox = {"enabled": True, "allowUnsandboxedCommands": False}
         return options
 
-    async def __call__(self, spec: AgentSpec, prompt: str, service: str, worktree: Path) -> AgentResult:
+    async def __call__(
+        self, spec: AgentSpec, prompt: str, service: str, worktree: Path, visual_changes: bool = False
+    ) -> AgentResult:
         tool_calls = 0
         result: ResultMessage | None = None
         self.trace.emit("agent_started", agent=spec.name)
-        async with ClaudeSDKClient(self._options(spec, service, worktree)) as client:
+        async with ClaudeSDKClient(self._options(spec, service, worktree, visual_changes)) as client:
             await client.query(prompt)
             async for message in client.receive_response():
                 if isinstance(message, AssistantMessage):

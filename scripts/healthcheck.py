@@ -39,6 +39,11 @@ def main() -> int:
             wait_until(lambda: call("GET", f"{base}/health")[0] == 200, f"{base} indisponível")
             print(f"OK saúde {base}")
 
+        for asset in ("app.js", "lib.js", "styles.css"):
+            request = urllib.request.Request(f"{WEB}/{asset}")
+            with urllib.request.urlopen(request, timeout=5) as response:
+                if response.status != 200:
+                    raise RuntimeError(f"front sem {asset}")
         wait_until(lambda: call("GET", f"{WEB}/api/catalog/health")[0] == 200, "front indisponível")
         print(f"OK front {WEB}")
 
