@@ -1,0 +1,2 @@
+run_id,demand,flow,cycle,status,wall_h,agent_min,human_min,cost_usd,tokens_in,tokens_out,tool_calls,interventions,rejections,edits,ci_failures,coverage_before,coverage_after,guardrail_blocks,failures,block_rules
+20261110T234154-cat-bug-01,CAT-BUG-01,catalog,bug,completed,0.11617554401527778,1.8026666666666666,6.833226390750012,0.38498559999999993,458474,8345,34,4,0,0,1,64,77,3,"{'ci_quebrado': 1, 'processo': 2}","{'shell_metachar': 2, 'command_not_allowed': 1}"
