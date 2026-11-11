@@ -6,6 +6,7 @@ import sys
 import time
 from datetime import UTC, datetime
 
+from orchestrator.console import ConsoleLog
 from orchestrator.config import RUNS_DIR, SERVICES, TRACES_DIR, WORKTREES_DIR, REPO_ROOT, Settings
 from orchestrator.demands import find_demand
 from orchestrator.flows import RunAborted, Supervisor
@@ -26,6 +27,7 @@ def parse_args() -> argparse.Namespace:
     pilot.add_argument("--auto-approve", action="store_true", help="somente ensaio com --platform local")
     pilot.add_argument("--operator", help="nome e papel padrão do aprovador")
     pilot.add_argument("--keep-worktree", action="store_true")
+    pilot.add_argument("--quiet", action="store_true", help="não exibe o andamento no terminal")
     commands.add_parser("report", help="gera pilot/report.md e pilot/report.csv")
     return parser.parse_args()
 
@@ -47,6 +49,7 @@ async def execute(args: argparse.Namespace) -> int:
     trace = Trace(
         TRACES_DIR / subdir / f"{run_id}.jsonl",
         run_id,
+        listener=None if args.quiet else ConsoleLog(),
         demand=demand.id,
         flow=demand.flow,
         cycle=demand.cycle,

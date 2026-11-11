@@ -88,6 +88,8 @@ python3 -m venv .venv
 
 Repita com `--flow catalog --cycle bug`, `--flow orders --cycle feature`, `--flow orders --cycle bug` e `--flow catalog --cycle guardrail`.
 
+Durante a execução, o terminal mostra cada fase do supervisor, as mensagens e ferramentas de cada agente, os bloqueios de guarda-corpo, o custo por agente e as decisões nos gates. Use `--quiet` para ver só os gates. O registro completo continua no trace.
+
 No G5, revise o PR no GitHub e faça o merge antes de responder `a` no terminal. Se responder antes do merge, o supervisor espera o merge sem registrar uma nova decisão. Ao final, consolide os dados:
 
 ```bash

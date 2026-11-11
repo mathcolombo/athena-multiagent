@@ -1,5 +1,6 @@
 import json
 import re
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -21,10 +22,17 @@ def sanitize(value: Any) -> Any:
 class Trace:
     """Log de auditoria append-only de uma execução, um evento JSON por linha."""
 
-    def __init__(self, path: Path, run_id: str, **common: Any) -> None:
+    def __init__(
+        self,
+        path: Path,
+        run_id: str,
+        listener: Callable[[dict], None] | None = None,
+        **common: Any,
+    ) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         self.path = path
         self.run_id = run_id
+        self.listener = listener
         self.common = common
 
     def emit(self, event: str, **fields: Any) -> None:
@@ -37,3 +45,5 @@ class Trace:
         }
         with self.path.open("a", encoding="utf-8") as output:
             output.write(json.dumps(record, ensure_ascii=False) + "\n")
+        if self.listener is not None:
+            self.listener(record)

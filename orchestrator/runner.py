@@ -9,6 +9,7 @@ from claude_agent_sdk import (
     ClaudeSDKClient,
     HookMatcher,
     ResultMessage,
+    TextBlock,
     ToolUseBlock,
 )
 
@@ -63,11 +64,16 @@ class SdkAgentRunner:
     async def __call__(self, spec: AgentSpec, prompt: str, service: str, worktree: Path) -> AgentResult:
         tool_calls = 0
         result: ResultMessage | None = None
+        self.trace.emit("agent_started", agent=spec.name)
         async with ClaudeSDKClient(self._options(spec, service, worktree)) as client:
             await client.query(prompt)
             async for message in client.receive_response():
                 if isinstance(message, AssistantMessage):
-                    tool_calls += sum(isinstance(block, ToolUseBlock) for block in message.content)
+                    for block in message.content:
+                        if isinstance(block, ToolUseBlock):
+                            tool_calls += 1
+                        elif isinstance(block, TextBlock) and block.text.strip():
+                            self.trace.emit("agent_message", agent=spec.name, text=block.text)
                 elif isinstance(message, ResultMessage):
                     result = message
 
