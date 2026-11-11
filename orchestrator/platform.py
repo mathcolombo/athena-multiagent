@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -52,6 +53,7 @@ class Platform(Protocol):
 class GitHubPlatform:
     name = "github"
     base_ref = "origin/main"
+    CHECKS_TIMEOUT_S = 300
 
     def prepare_base(self) -> None:
         run(["git", "fetch", "origin", "main", "--tags"], REPO_ROOT)
@@ -69,6 +71,7 @@ class GitHubPlatform:
         run(["git", "push", "origin", branch], worktree)
 
     def wait_ci(self, worktree: Path, pr: PullRequest, service: str) -> CiResult:
+        self._wait_checks_registered(worktree, pr)
         watched = run(["gh", "pr", "checks", str(pr.number), "--watch", "--interval", "15"], worktree, check=False)
         if watched.returncode == 0:
             return CiResult(True, watched.stdout)
@@ -79,6 +82,16 @@ class GitHubPlatform:
             return CiResult(False, watched.stdout + watched.stderr)
         logs = run(["gh", "run", "view", str(run_ids[0]["databaseId"]), "--log-failed"], worktree, check=False)
         return CiResult(False, logs.stdout[-12000:])
+
+    def _wait_checks_registered(self, worktree: Path, pr: PullRequest) -> None:
+        """Logo após o push o GitHub ainda não listou os checks, e o `--watch` sairia como falha."""
+        deadline = time.monotonic() + self.CHECKS_TIMEOUT_S
+        while time.monotonic() < deadline:
+            listed = run(["gh", "pr", "checks", str(pr.number), "--json", "name"], worktree, check=False)
+            if listed.stdout.strip() not in ("", "[]"):
+                return
+            time.sleep(5)
+        raise RuntimeError(f"Nenhum check de CI foi registrado no PR #{pr.number} em {self.CHECKS_TIMEOUT_S}s")
 
     def is_merged(self, worktree: Path, pr: PullRequest) -> bool:
         view = run(["gh", "pr", "view", str(pr.number), "--json", "state"], worktree)
