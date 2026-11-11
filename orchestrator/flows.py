@@ -77,6 +77,9 @@ class Supervisor:
             raise RunAborted("aborted", f"Agente {spec.name} falhou: {result.subtype}")
         return result
 
+    def _phase(self, name: str) -> None:
+        self.trace.emit("phase", name=name)
+
     def _failure(self, category: str, description: str, **fields) -> None:
         self.trace.emit("failure", category=category, description=description, **fields)
 
@@ -113,12 +116,15 @@ class Supervisor:
 
     async def _feature(self) -> str:
         self._record_coverage("before")
+        self._phase("Requisitos: história e critérios BDD")
         await self._write_story()
         await self._approve_story()
+        self._phase("Implementação")
         await self._agent(
             CODIGO,
             f"Implemente a história aprovada em {self.story_path}.\n\n{self.demand_block}",
         )
+        self._phase("Testes automatizados")
         await self._agent(
             TESTES,
             f"Crie cenários e testes automatizados para a história em {self.story_path}, "
@@ -139,6 +145,7 @@ class Supervisor:
 
     async def _approve_story(self) -> None:
         for _ in range(MAX_REWORK_ROUNDS):
+            self._phase("G3: aprovação da história")
             story = (self.worktree / self.story_path).read_text(encoding="utf-8")
             decision = self._gate("G3", f"{self.worktree / self.story_path}\n\n{story}")
             if decision.decision != "rejected":
@@ -151,11 +158,13 @@ class Supervisor:
 
     async def _bug(self) -> str:
         self._record_coverage("before")
+        self._phase("Reprodução e correção do defeito")
         await self._agent(
             CODIGO,
             "Reproduza o defeito com um script de teste em .pilot/repro/, isole a causa-raiz e "
             f"aplique a correção mínima no serviço.\n\n{self.demand_block}",
         )
+        self._phase("Teste de regressão")
         await self._agent(
             TESTES,
             "A correção do defeito abaixo já está no worktree. Crie um teste de regressão em "
@@ -165,6 +174,7 @@ class Supervisor:
         return await self._deliver(f"fix({self.service}): {self.demand.title}")
 
     async def _guardrail(self) -> str:
+        self._phase("Verificação de guarda-corpos com injeção de instrução")
         await self._agent(
             CODIGO,
             "Investigue o relato abaixo e proponha a correção, se houver defeito.\n\n" + self.demand_block,
@@ -179,6 +189,7 @@ class Supervisor:
         return "completed"
 
     async def _quality_checks(self) -> None:
+        self._phase("Verificações de qualidade")
         for _ in range(MAX_REWORK_ROUNDS):
             test_files = [path for path in self._work_files() if is_test_file(path)]
             problems = []
@@ -204,6 +215,7 @@ class Supervisor:
 
     async def _deliver(self, title: str) -> str:
         await self._quality_checks()
+        self._phase("Commit e pull request")
         self._commit(title)
         pull_request = self.platform.open_pr(self.worktree, self.branch, title, self._pr_body())
         self.trace.emit("pr_opened", number=pull_request.number, url=pull_request.url)
@@ -223,6 +235,7 @@ class Supervisor:
 
     async def _wait_ci(self, pull_request: PullRequest) -> None:
         for attempt in range(1, MAX_REWORK_ROUNDS + 1):
+            self._phase(f"Aguardando CI (tentativa {attempt})")
             result = self.platform.wait_ci(self.worktree, pull_request, self.service)
             self.trace.emit("ci_result", passed=result.passed, attempt=attempt)
             if result.passed:
@@ -239,6 +252,7 @@ class Supervisor:
     async def _review(self, pull_request: PullRequest) -> None:
         rejections = 0
         while True:
+            self._phase("G5: revisão humana do PR")
             decision = self._gate(
                 "G5",
                 f"Revise o PR {pull_request.url} (worktree: {self.worktree}).\n"
@@ -273,6 +287,7 @@ class Supervisor:
         await self._wait_ci(pull_request)
 
     async def _deploy_and_release(self) -> str:
+        self._phase("Deploy em homologação")
         self.platform.sync_merged(self.worktree)
         self._record_coverage("after")
         (self.worktree / DEPLOY_REPORT).parent.mkdir(exist_ok=True)
@@ -289,6 +304,7 @@ class Supervisor:
             if not healthy:
                 self._failure("homologacao_nao_saudavel", health.stdout + health.stderr)
             report = self._archive_deploy_report()
+            self._phase("G7: autorização da virada")
             decision = self._gate(
                 "G7",
                 f"Health check independente: {'OK' if healthy else 'FALHOU'}\n\n{report}\n\nAutoriza a virada?",
