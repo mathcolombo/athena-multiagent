@@ -10,6 +10,7 @@ from skynet_events import (
     ProductCreated,
     ProductPriceChanged,
     StockRejected,
+    StockLow,
     StockReserved,
     decode,
     new_event,
@@ -34,11 +35,27 @@ class ProductUpdate(BaseModel):
     low_stock_threshold: int | None = Field(default=None, ge=0)
 
 
+def is_low_stock(product) -> bool:
+    threshold = product["low_stock_threshold"]
+    return threshold is not None and product["stock"] < threshold
+
+
 def product_view(product) -> dict:
     data = dict(product)
-    threshold = data["low_stock_threshold"]
-    data["low_stock"] = threshold is not None and data["stock"] < threshold
+    data["low_stock"] = is_low_stock(product)
     return data
+
+
+def stock_low_event(product):
+    return new_event(
+        StockLow(
+            product_id=product["id"],
+            name=product["name"],
+            stock=product["stock"],
+            threshold=product["low_stock_threshold"],
+        ),
+        PRODUCER,
+    )
 
 
 def create_app(database_path: str, bus: EventBus) -> FastAPI:
@@ -84,6 +101,8 @@ def create_app(database_path: str, bus: EventBus) -> FastAPI:
                 PRODUCER,
             )
         )
+        if is_low_stock(product):
+            await bus.publish(stock_low_event(product))
         return product_view(product)
 
     @app.get("/products")
@@ -122,6 +141,8 @@ def create_app(database_path: str, bus: EventBus) -> FastAPI:
                     PRODUCER,
                 )
             )
-        return dict(product)
+        if is_low_stock(product) and not is_low_stock(previous):
+            await bus.publish(stock_low_event(product))
+        return product_view(product)
 
     return app

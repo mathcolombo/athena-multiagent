@@ -224,3 +224,169 @@ def test_database_rejects_negative_threshold_directly():
     db = CatalogDb(":memory:")
     with pytest.raises(sqlite3.IntegrityError):
         db.create_product("X", 1, 1, -1)
+
+
+# ---------------------------------------------------------------- CAT-FEAT-01 / T3
+
+
+def _low_events(bus):
+    return [event for event in bus.published if event.event_type == "stock.low"]
+
+
+def test_create_product_already_below_threshold_publishes_stock_low():
+    """CAT-FEAT-01, cenário "Cadastrar produto já abaixo do limite"."""
+    bus = InMemoryBus()
+    with TestClient(create_app(":memory:", bus)) as client:
+        product = _create(client, name="Pilha", stock=2, low_stock_threshold=5).json()
+
+    assert product["low_stock"] is True
+    low = _low_events(bus)
+    assert len(low) == 1
+    assert low[0].producer == "catalog"
+    assert low[0].payload == {
+        "product_id": product["id"],
+        "name": "Pilha",
+        "stock": 2,
+        "threshold": 5,
+    }
+
+
+def test_manual_stock_change_crossing_threshold_publishes_stock_low():
+    """CAT-FEAT-01, cenário "Alteração manual de estoque cruza o limite"."""
+    bus = InMemoryBus()
+    with TestClient(create_app(":memory:", bus)) as client:
+        product = _create(client, name="Fita", stock=5, low_stock_threshold=3).json()
+        assert _low_events(bus) == []
+        response = client.patch(f"/products/{product['id']}", json={"stock": 2})
+        assert response.status_code == 200
+        assert client.get(f"/products/{product['id']}").json()["low_stock"] is True
+
+    low = _low_events(bus)
+    assert len(low) == 1
+    assert low[0].payload == {
+        "product_id": product["id"],
+        "name": "Fita",
+        "stock": 2,
+        "threshold": 3,
+    }
+
+
+def test_stock_equal_to_threshold_is_not_low():
+    """CAT-FEAT-01, cenário "Estoque igual ao limite não é baixo"."""
+    bus = InMemoryBus()
+    with TestClient(create_app(":memory:", bus)) as client:
+        product = _create(client, stock=5, low_stock_threshold=3).json()
+        client.patch(f"/products/{product['id']}", json={"stock": 3})
+        assert client.get(f"/products/{product['id']}").json()["low_stock"] is False
+
+    assert _low_events(bus) == []
+
+
+def test_no_repeated_stock_low_while_still_low():
+    """CAT-FEAT-01, cenário "Sem repetição enquanto continua baixo" (alteração manual)."""
+    bus = InMemoryBus()
+    with TestClient(create_app(":memory:", bus)) as client:
+        product = _create(client, stock=5, low_stock_threshold=3).json()
+        client.patch(f"/products/{product['id']}", json={"stock": 2})
+        client.patch(f"/products/{product['id']}", json={"stock": 1})
+        client.patch(f"/products/{product['id']}", json={"stock": 0})
+        client.patch(f"/products/{product['id']}", json={"price_cents": 1})
+
+    assert len(_low_events(bus)) == 1
+
+
+def test_replenish_then_new_crossing_publishes_again():
+    """CAT-FEAT-01, cenário "Reposição e novo cruzamento"."""
+    bus = InMemoryBus()
+    with TestClient(create_app(":memory:", bus)) as client:
+        product = _create(client, stock=2, low_stock_threshold=3).json()
+        assert len(_low_events(bus)) == 1
+
+        client.patch(f"/products/{product['id']}", json={"stock": 3})
+        assert client.get(f"/products/{product['id']}").json()["low_stock"] is False
+        assert len(_low_events(bus)) == 1
+
+        client.patch(f"/products/{product['id']}", json={"stock": 1})
+        assert client.get(f"/products/{product['id']}").json()["low_stock"] is True
+
+    low = _low_events(bus)
+    assert len(low) == 2
+    assert low[1].payload["stock"] == 1
+    assert low[1].payload["threshold"] == 3
+
+
+def test_replenish_above_threshold_then_cross_again():
+    """CAT-FEAT-01, "Reposição e novo cruzamento": reposição acima do limite."""
+    bus = InMemoryBus()
+    with TestClient(create_app(":memory:", bus)) as client:
+        product = _create(client, stock=1, low_stock_threshold=3).json()
+        client.patch(f"/products/{product['id']}", json={"stock": 20})
+        client.patch(f"/products/{product['id']}", json={"stock": 2})
+
+    assert len(_low_events(bus)) == 2
+
+
+def test_setting_threshold_above_current_stock_publishes_stock_low():
+    """CAT-FEAT-01, cenário "Configurar limite acima do estoque atual"."""
+    bus = InMemoryBus()
+    with TestClient(create_app(":memory:", bus)) as client:
+        product = _create(client, name="Bateria", stock=5).json()
+        assert _low_events(bus) == []
+        client.patch(f"/products/{product['id']}", json={"low_stock_threshold": 8})
+        assert client.get(f"/products/{product['id']}").json()["low_stock"] is True
+
+    low = _low_events(bus)
+    assert len(low) == 1
+    assert low[0].payload == {
+        "product_id": product["id"],
+        "name": "Bateria",
+        "stock": 5,
+        "threshold": 8,
+    }
+
+
+def test_raising_threshold_when_already_low_does_not_publish_again():
+    """CAT-FEAT-01, cenário "Aumentar o limite com produto já baixo"."""
+    bus = InMemoryBus()
+    with TestClient(create_app(":memory:", bus)) as client:
+        product = _create(client, stock=2, low_stock_threshold=3).json()
+        assert len(_low_events(bus)) == 1
+        client.patch(f"/products/{product['id']}", json={"low_stock_threshold": 6})
+        assert client.get(f"/products/{product['id']}").json()["low_stock"] is True
+
+    assert len(_low_events(bus)) == 1
+
+
+def test_lowering_threshold_takes_product_out_of_low_without_event():
+    """CAT-FEAT-01, cenário "Reduzir o limite tira o produto de estoque baixo"."""
+    bus = InMemoryBus()
+    with TestClient(create_app(":memory:", bus)) as client:
+        product = _create(client, stock=2, low_stock_threshold=3).json()
+        published_before = len(bus.published)
+        client.patch(f"/products/{product['id']}", json={"low_stock_threshold": 2})
+        assert client.get(f"/products/{product['id']}").json()["low_stock"] is False
+
+    assert len(bus.published) == published_before
+
+
+def test_product_without_threshold_never_publishes_stock_low_on_manual_change():
+    """CAT-FEAT-01, cenário "Produto sem limite nunca avisa" (alteração manual)."""
+    bus = InMemoryBus()
+    with TestClient(create_app(":memory:", bus)) as client:
+        product = _create(client, stock=5).json()
+        client.patch(f"/products/{product['id']}", json={"stock": 1})
+        client.patch(f"/products/{product['id']}", json={"stock": 0})
+        assert client.get(f"/products/{product['id']}").json()["low_stock"] is False
+
+    assert _low_events(bus) == []
+
+
+def test_removing_threshold_then_stock_drop_does_not_publish():
+    """CAT-FEAT-01, "Produto sem limite nunca avisa": limite removido deixa de avisar."""
+    bus = InMemoryBus()
+    with TestClient(create_app(":memory:", bus)) as client:
+        product = _create(client, stock=5, low_stock_threshold=3).json()
+        client.patch(f"/products/{product['id']}", json={"low_stock_threshold": None})
+        client.patch(f"/products/{product['id']}", json={"stock": 0})
+
+    assert _low_events(bus) == []
