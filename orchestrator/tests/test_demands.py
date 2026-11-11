@@ -1,16 +1,59 @@
-from orchestrator.config import DEMANDS_DIR
-from orchestrator.demands import find_demand, parse_demand
+import pytest
+
+from orchestrator.checks import parse_tasks
+from orchestrator.demands import InvalidIssue, demand_from_issue
+
+BODY = (
+    "## Demanda\n\nClientes querem cancelar pedidos.\n\n"
+    "## Observação\n\nTexto para humanos.\n\n"
+    "## Execução no piloto\n\ncomando\n"
+)
 
 
-def test_every_pilot_demand_is_linked_to_an_issue():
-    demands = [parse_demand(path) for path in sorted(DEMANDS_DIR.glob("*.md"))]
+def issue(**changes):
+    data = {
+        "number": 4,
+        "title": "[ORD-FEAT-01] cancelamento de pedido",
+        "body": BODY,
+        "state": "OPEN",
+        "labels": [{"name": "piloto"}, {"name": "fluxo:orders"}, {"name": "ciclo:feature"}],
+    }
+    return data | changes
 
-    assert len(demands) == 5
-    assert all(demand.issue for demand in demands)
-    assert len({demand.issue for demand in demands}) == 5
+
+def test_issue_becomes_demand_with_only_the_demand_section():
+    demand = demand_from_issue(issue())
+
+    assert (demand.id, demand.flow, demand.cycle, demand.issue) == ("ORD-FEAT-01", "orders", "feature", 4)
+    assert demand.title == "cancelamento de pedido"
+    assert demand.body == "Clientes querem cancelar pedidos."
 
 
-def test_find_demand_by_flow_and_cycle():
-    demand = find_demand("orders", "bug")
+def test_issue_without_id_in_title_uses_issue_number():
+    demand = demand_from_issue(issue(title="Nova demanda"))
 
-    assert (demand.id, demand.issue) == ("ORD-BUG-01", 5)
+    assert (demand.id, demand.title) == ("ISSUE-4", "Nova demanda")
+
+
+@pytest.mark.parametrize(
+    "changes, message",
+    [
+        ({"labels": [{"name": "fluxo:orders"}, {"name": "ciclo:feature"}]}, "piloto"),
+        ({"state": "CLOSED"}, "fechada"),
+        ({"labels": [{"name": "piloto"}, {"name": "ciclo:feature"}]}, "fluxo:"),
+        ({"labels": [{"name": "piloto"}, {"name": "fluxo:orders"}, {"name": "ciclo:feature"}, {"name": "ciclo:bug"}]}, "ciclo:"),
+        ({"labels": [{"name": "piloto"}, {"name": "fluxo:payments"}, {"name": "ciclo:bug"}]}, "fluxo:"),
+    ],
+)
+def test_invalid_issues_are_refused(changes, message):
+    with pytest.raises(InvalidIssue, match=message):
+        demand_from_issue(issue(**changes))
+
+
+def test_parse_tasks_stops_at_next_section():
+    story = "## Tasks\n\n### T1: contrato\nCenários: a\n\n### T2: rota\nCenários: b\n\n## Questões em aberto\nnenhuma\n"
+
+    tasks = parse_tasks(story)
+
+    assert [(t.id, t.title) for t in tasks] == [("T1", "contrato"), ("T2", "rota")]
+    assert tasks[1].body == "Cenários: b"

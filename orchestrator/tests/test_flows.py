@@ -11,7 +11,11 @@ from orchestrator.platform import CiResult, PullRequest
 from orchestrator.runner import AgentResult
 from orchestrator.tracing import Trace
 
-STORY = "# H\n\nRegra: RN-01\n\nCenário: ok\n"
+STORY = (
+    "# H\n\nRegra: RN-01\n\nCenário: ok\n\n## Tasks\n\n"
+    "### T1: contrato\nCenários: ok\nPronto quando: x\n\n"
+    "### T2: rota\nCenários: ok\nPronto quando: y\n\n## Questões em aberto\n"
+)
 REJECT = GateDecision("rejected", "faltou caso", "rev", 1.0, 2.0, "qualidade_codigo", "ambos")
 
 
@@ -63,22 +67,26 @@ class FakePlatform:
 class FakeRunner:
     """Simula os agentes escrevendo arquivos no worktree."""
 
-    def __init__(self, repo, test_body="from mod import VALUE\n\ndef test_ok():\n    assert VALUE == 2\n"):
+    def __init__(self, repo, test_body="import mod\n\ndef test_ok():\n    assert getattr(mod, 'VALUE{n}', None) == {n}\n"):
         self.repo = repo
         self.test_body = test_body
         self.calls = []
+        self.prompts = []
         self.errors = {}
 
     async def __call__(self, spec, prompt, service, worktree):
         self.calls.append(spec.name)
+        self.prompts.append(prompt)
+        n = self.calls.count(spec.name)
         if spec.name in self.errors:
             return AgentResult(spec.name, "", True, self.errors[spec.name], 0.0)
         if spec.name == "requisitos":
             (worktree / "docs/backlog/D-1.md").write_text(STORY)
         elif spec.name == "codigo":
-            (worktree / "services/catalog/mod.py").write_text("VALUE = 2\n")
+            with (worktree / "services/catalog/mod.py").open("a") as module:
+                module.write(f"VALUE{n} = {n}\n")
         elif spec.name == "testes":
-            (worktree / "services/catalog/tests/test_mod.py").write_text(self.test_body)
+            (worktree / f"services/catalog/tests/test_mod_{n}.py").write_text(self.test_body.replace("{n}", str(n)))
         elif spec.name == "deploy":
             (worktree / ".pilot").mkdir(exist_ok=True)
             (worktree / ".pilot/deploy_report.md").write_text("STATUS: OK\n")
@@ -112,8 +120,36 @@ async def test_feature_passes_all_gates_in_order(repo, tmp_path_factory):
 
     assert await supervisor.run() == "completed"
     assert [e["gate"] for e in events(trace, "gate_decision")] == ["G3", "G5", "G7"]
-    assert runner.calls == ["requisitos", "codigo", "testes", "deploy"]
+    assert runner.calls == ["requisitos", "codigo", "testes", "codigo", "testes", "deploy"]
     assert platform.tags == ["release/r1"]
+
+
+async def test_feature_commits_each_task_separately(repo, tmp_path_factory):
+    supervisor, runner, _, trace = build(repo, tmp_path_factory)
+
+    await supervisor.run()
+
+    log = subprocess.run(["git", "log", "--format=%s", "main..HEAD"], cwd=repo, capture_output=True, text=True).stdout
+    assert log.splitlines() == ["feat(catalog): T2 rota", "feat(catalog): T1 contrato"]
+    assert [t["id"] for t in events(trace, "tasks_planned")[0]["tasks"]] == ["T1", "T2"]
+    assert [e["task"] for e in events(trace, "task_finished")] == ["T1", "T2"]
+    assert "somente a task T1" in runner.prompts[1] and "somente a task T2" in runner.prompts[3]
+
+
+async def test_story_without_tasks_goes_back_to_refinement(repo, tmp_path_factory):
+    class NoTasks(FakeRunner):
+        async def __call__(self, spec, prompt, service, worktree):
+            result = await super().__call__(spec, prompt, service, worktree)
+            if spec.name == "requisitos":
+                (worktree / "docs/backlog/D-1.md").write_text("Regra: RN-01\nCenário: ok\n")
+            return result
+
+    supervisor, runner, _, trace = build(repo, tmp_path_factory, runner=NoTasks(repo))
+
+    with pytest.raises(RunAborted):
+        await supervisor.run()
+    assert runner.calls == ["requisitos"] * 3
+    assert "nenhuma task" in events(trace, "failure")[0]["description"]
 
 
 def test_pr_body_closes_demand_issue(repo, tmp_path_factory):
@@ -177,7 +213,7 @@ async def test_g5_rejection_reruns_agents_and_counts(repo, tmp_path_factory):
     supervisor, runner, _, trace = build(repo, tmp_path_factory, gates=gates)
 
     assert await supervisor.run() == "completed"
-    assert runner.calls.count("codigo") == 2
+    assert runner.calls.count("codigo") == 3
     assert [e["decision"] for e in events(trace, "gate_decision") if e["gate"] == "G5"] == ["rejected", "approved"]
     assert events(trace, "failure")[0]["category"] == "qualidade_codigo"
 
@@ -186,7 +222,7 @@ async def test_ci_failure_sends_log_to_code_agent(repo, tmp_path_factory):
     supervisor, runner, _, trace = build(repo, tmp_path_factory, platform=FakePlatform(ci=(False, True)))
 
     assert await supervisor.run() == "completed"
-    assert runner.calls.count("codigo") == 2
+    assert runner.calls.count("codigo") == 3
     assert [e["passed"] for e in events(trace, "ci_result")] == [False, True]
 
 

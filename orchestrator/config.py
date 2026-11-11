@@ -5,12 +5,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TRACES_DIR = REPO_ROOT / "pilot" / "traces"
 RUNS_DIR = REPO_ROOT / "pilot" / "runs"
-DEMANDS_DIR = REPO_ROOT / "pilot" / "demands"
 WORKTREES_DIR = REPO_ROOT / ".pilot-worktrees"
 PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 
 LOCAL_BASE_BRANCH = "pilot-local"
 MAX_REWORK_ROUNDS = 3
+MAX_TASKS = 6
 SERVICES = ("catalog", "cart", "orders")
 
 

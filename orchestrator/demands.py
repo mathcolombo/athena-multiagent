@@ -1,7 +1,14 @@
+import json
+import re
 from dataclasses import dataclass
-from pathlib import Path
 
-from orchestrator.config import DEMANDS_DIR
+from orchestrator.config import REPO_ROOT, SERVICES
+from orchestrator.platform import run
+
+CYCLES = ("feature", "bug", "guardrail")
+PILOT_LABEL = "piloto"
+TITLE_WITH_ID = re.compile(r"^\[([A-Z0-9-]+)\]\s*(.+)$")
+DEMAND_SECTION = re.compile(r"^## Demanda[ \t]*\n(.*?)(?=^## |\Z)", re.MULTILINE | re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -14,18 +21,42 @@ class Demand:
     issue: int | None = None
 
 
-def parse_demand(path: Path) -> Demand:
-    _, header, body = path.read_text(encoding="utf-8").split("---\n", 2)
-    fields = dict(line.split(": ", 1) for line in header.strip().splitlines())
-    issue = int(fields["issue"]) if "issue" in fields else None
-    return Demand(fields["id"], fields["flow"], fields["cycle"], fields["title"], body.strip(), issue)
+class InvalidIssue(ValueError):
+    pass
 
 
-def find_demand(flow: str, cycle: str, directory: Path = DEMANDS_DIR) -> Demand:
-    matches = [
-        demand for demand in map(parse_demand, sorted(directory.glob("*.md")))
-        if demand.flow == flow and demand.cycle == cycle
-    ]
-    if len(matches) != 1:
-        raise SystemExit(f"Esperada 1 demanda para {flow}/{cycle}, encontradas {len(matches)}")
-    return matches[0]
+def _single_label(labels: set[str], prefix: str, allowed: tuple[str, ...]) -> str:
+    values = [label.removeprefix(prefix) for label in labels if label.startswith(prefix)]
+    if len(values) != 1 or values[0] not in allowed:
+        raise InvalidIssue(f"a issue precisa de exatamente um rótulo {prefix}<{'|'.join(allowed)}>")
+    return values[0]
+
+
+def demand_from_issue(issue: dict) -> Demand:
+    """O rótulo `piloto` só pode ser aplicado por quem tem acesso de triagem, o que impede rodar issues de terceiros."""
+    labels = {label["name"] for label in issue["labels"]}
+    if PILOT_LABEL not in labels:
+        raise InvalidIssue(f"a issue #{issue['number']} não tem o rótulo '{PILOT_LABEL}'")
+    if issue["state"] != "OPEN":
+        raise InvalidIssue(f"a issue #{issue['number']} está fechada")
+
+    match = TITLE_WITH_ID.match(issue["title"])
+    demand_id, title = (match.group(1), match.group(2)) if match else (f"ISSUE-{issue['number']}", issue["title"])
+    section = DEMAND_SECTION.search(issue["body"])
+    body = (section.group(1) if section else issue["body"]).strip()
+    if not body:
+        raise InvalidIssue(f"a issue #{issue['number']} não tem descrição da demanda")
+
+    return Demand(
+        id=demand_id,
+        flow=_single_label(labels, "fluxo:", SERVICES),
+        cycle=_single_label(labels, "ciclo:", CYCLES),
+        title=title,
+        body=body,
+        issue=issue["number"],
+    )
+
+
+def fetch_demand(number: int) -> Demand:
+    view = run(["gh", "issue", "view", str(number), "--json", "number,title,body,labels,state"], REPO_ROOT)
+    return demand_from_issue(json.loads(view.stdout))

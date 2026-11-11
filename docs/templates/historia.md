@@ -22,3 +22,15 @@ Cenário: <caso de exceção>
 |---|---|---|
 
 ## Questões em aberto
+
+## Tasks
+
+### T1: <título>
+Cenários: <nomes dos cenários cobertos>
+Arquivos: <arquivos prováveis>
+Pronto quando: <critério objetivo>
+
+### T2: <título>
+Cenários: <...>
+Arquivos: <...>
+Pronto quando: <...>

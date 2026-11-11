@@ -6,7 +6,7 @@ Monorepo do piloto instrumentado do trabalho "Desenvolvimento de Software Guiado
 - `libs/events/`: contratos de eventos e barramentos
 - `web/`: front simples de homologação em http://localhost:8080
 - `orchestrator/`: supervisor, agentes (Claude Agent SDK), guarda-corpos, gates e tracing
-- `pilot/`: demandas, traces e relatório
+- `pilot/`: traces e relatório; as demandas são issues do GitHub com o rótulo `piloto`
 - `docs/`: conhecimento do projeto e [protocolo do piloto](docs/piloto/protocolo.md)
 - `AGENTS.md`: contexto injetado nos agentes
 
