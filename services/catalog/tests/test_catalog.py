@@ -1,8 +1,10 @@
+import asyncio
 import sqlite3
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from skynet_events import InMemoryBus
+from skynet_events import InMemoryBus, LineItem, OrderCreated, new_event
 
 from catalog_service.app import create_app
 from catalog_service.db import CatalogDb
@@ -390,3 +392,174 @@ def test_removing_threshold_then_stock_drop_does_not_publish():
         client.patch(f"/products/{product['id']}", json={"stock": 0})
 
     assert _low_events(bus) == []
+
+
+# ---------------------------------------------------------------- CAT-FEAT-01 / T4
+
+
+def _order_created(items, correlation_id=None):
+    payload = OrderCreated(
+        order_id="order-1",
+        cart_id="cart-1",
+        customer_id="cliente-1",
+        items=[
+            LineItem(product_id=product_id, quantity=quantity, unit_price_cents=1000)
+            for product_id, quantity in items
+        ],
+        total_cents=1000,
+    )
+    return new_event(payload, "orders", correlation_id or uuid4())
+
+
+def _types(bus):
+    return [event.event_type for event in bus.published]
+
+
+def test_order_reservation_crossing_threshold_publishes_stock_low_after_reserved():
+    """CAT-FEAT-01, cenário "Reserva de pedido cruza o limite"."""
+    bus = InMemoryBus()
+    with TestClient(create_app(":memory:", bus)) as client:
+        product = _create(client, name="Lampada", stock=5, low_stock_threshold=3).json()
+        published_before = len(bus.published)
+        order = _order_created([(product["id"], 3)])
+
+        asyncio.run(bus.publish(order))
+
+        new_types = _types(bus)[published_before:]
+        assert new_types == ["order.created", "stock.reserved", "stock.low"]
+        fetched = client.get(f"/products/{product['id']}").json()
+        assert fetched["stock"] == 2
+        assert fetched["low_stock"] is True
+
+    low = _low_events(bus)
+    assert len(low) == 1
+    assert low[0].correlation_id == order.correlation_id
+    assert low[0].producer == "catalog"
+    assert low[0].payload == {
+        "product_id": product["id"],
+        "name": "Lampada",
+        "stock": 2,
+        "threshold": 3,
+    }
+
+
+def test_order_reservation_with_several_products_publishes_one_stock_low_each():
+    """CAT-FEAT-01, cenário "Reserva de pedido com vários produtos"."""
+    bus = InMemoryBus()
+    with TestClient(create_app(":memory:", bus)) as client:
+        first = _create(client, name="Alfa", stock=5, low_stock_threshold=3).json()
+        second = _create(client, name="Beta", stock=4, low_stock_threshold=4).json()
+        untouched = _create(client, name="Gama", stock=9, low_stock_threshold=3).json()
+        order = _order_created([(first["id"], 3), (second["id"], 1), (untouched["id"], 1)])
+
+        asyncio.run(bus.publish(order))
+
+    low = _low_events(bus)
+    assert sorted(event.payload["product_id"] for event in low) == sorted(
+        [first["id"], second["id"]]
+    )
+    by_product = {event.payload["product_id"]: event.payload for event in low}
+    assert by_product[first["id"]]["stock"] == 2
+    assert by_product[second["id"]]["stock"] == 3
+    assert all(event.correlation_id == order.correlation_id for event in low)
+    assert _types(bus).count("stock.reserved") == 1
+
+
+def test_order_reservation_same_product_in_two_lines_publishes_single_stock_low():
+    """CAT-FEAT-01, "Reserva de pedido com vários produtos": um aviso por produto, não por linha."""
+    bus = InMemoryBus()
+    with TestClient(create_app(":memory:", bus)) as client:
+        product = _create(client, stock=6, low_stock_threshold=3).json()
+        asyncio.run(bus.publish(_order_created([(product["id"], 2), (product["id"], 2)])))
+
+    assert len(_low_events(bus)) == 1
+    assert _low_events(bus)[0].payload["stock"] == 2
+
+
+def test_rejected_reservation_publishes_no_stock_low_and_keeps_stock():
+    """CAT-FEAT-01, cenário "Reserva rejeitada não avisa"."""
+    bus = InMemoryBus()
+    with TestClient(create_app(":memory:", bus)) as client:
+        ok = _create(client, name="Ok", stock=5, low_stock_threshold=3).json()
+        short = _create(client, name="Curto", stock=1).json()
+        published_before = len(bus.published)
+
+        asyncio.run(bus.publish(_order_created([(ok["id"], 3), (short["id"], 2)])))
+
+        assert _types(bus)[published_before:] == ["order.created", "stock.rejected"]
+        assert client.get(f"/products/{ok['id']}").json()["stock"] == 5
+        assert client.get(f"/products/{ok['id']}").json()["low_stock"] is False
+        assert client.get(f"/products/{short['id']}").json()["stock"] == 1
+
+    assert _low_events(bus) == []
+
+
+def test_redelivered_order_created_does_not_duplicate_stock_low():
+    """CAT-FEAT-01, cenário "Reentrega de order.created não duplica aviso"."""
+    bus = InMemoryBus()
+    with TestClient(create_app(":memory:", bus)) as client:
+        product = _create(client, stock=5, low_stock_threshold=3).json()
+        order = _order_created([(product["id"], 3)])
+        asyncio.run(bus.publish(order))
+        published_before = len(bus.published)
+
+        asyncio.run(bus.deliver(order))
+
+        assert len(bus.published) == published_before
+        assert client.get(f"/products/{product['id']}").json()["stock"] == 2
+
+    assert len(_low_events(bus)) == 1
+
+
+def test_order_reservation_while_already_low_does_not_publish_again():
+    """CAT-FEAT-01, cenário "Sem repetição enquanto continua baixo" (reserva)."""
+    bus = InMemoryBus()
+    with TestClient(create_app(":memory:", bus)) as client:
+        product = _create(client, stock=2, low_stock_threshold=3).json()
+        assert len(_low_events(bus)) == 1
+
+        asyncio.run(bus.publish(_order_created([(product["id"], 1)])))
+
+        assert client.get(f"/products/{product['id']}").json()["stock"] == 1
+        assert "stock.reserved" in _types(bus)
+
+    assert len(_low_events(bus)) == 1
+
+
+def test_order_reservation_without_threshold_never_publishes_stock_low():
+    """CAT-FEAT-01, cenário "Produto sem limite nunca avisa" (reserva)."""
+    bus = InMemoryBus()
+    with TestClient(create_app(":memory:", bus)) as client:
+        product = _create(client, stock=3).json()
+        asyncio.run(bus.publish(_order_created([(product["id"], 3)])))
+
+        assert client.get(f"/products/{product['id']}").json()["stock"] == 0
+        assert client.get(f"/products/{product['id']}").json()["low_stock"] is False
+
+    assert _low_events(bus) == []
+    assert "stock.reserved" in _types(bus)
+
+
+def test_reservation_not_crossing_threshold_does_not_publish():
+    """CAT-FEAT-01, T4: reserva que deixa estoque igual ao limite não avisa."""
+    bus = InMemoryBus()
+    with TestClient(create_app(":memory:", bus)) as client:
+        product = _create(client, stock=5, low_stock_threshold=3).json()
+        asyncio.run(bus.publish(_order_created([(product["id"], 2)])))
+
+    assert _low_events(bus) == []
+
+
+def test_reserve_stock_db_reports_crossed_products_only_when_confirmed():
+    """CAT-FEAT-01, T4: `reserve_stock` devolve os produtos que cruzaram o limite, ou None se rejeitada."""
+    db = CatalogDb(":memory:")
+    crossing = db.create_product("Cruza", 100, 5, 3)
+    plain = db.create_product("Sem", 100, 5)
+
+    crossed = db.reserve_stock([(crossing["id"], 3), (plain["id"], 5)])
+    assert [row["id"] for row in crossed] == [crossing["id"]]
+    assert crossed[0]["stock"] == 2
+
+    assert db.reserve_stock([(crossing["id"], 1), (plain["id"], 1)]) is None
+    assert db.get_product(crossing["id"])["stock"] == 2
+    assert db.reserve_stock([(crossing["id"], 1)]) == []

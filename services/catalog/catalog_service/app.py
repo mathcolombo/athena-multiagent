@@ -46,7 +46,7 @@ def product_view(product) -> dict:
     return data
 
 
-def stock_low_event(product):
+def stock_low_event(product, correlation_id=None):
     return new_event(
         StockLow(
             product_id=product["id"],
@@ -55,6 +55,7 @@ def stock_low_event(product):
             threshold=product["low_stock_threshold"],
         ),
         PRODUCER,
+        correlation_id,
     )
 
 
@@ -65,13 +66,15 @@ def create_app(database_path: str, bus: EventBus) -> FastAPI:
         if not db.mark_processed(str(event.event_id)):
             return
         order = decode(event, OrderCreated)
-        reserved = db.reserve_stock([(item.product_id, item.quantity) for item in order.items])
+        crossed = db.reserve_stock([(item.product_id, item.quantity) for item in order.items])
         result = (
-            StockReserved(order_id=order.order_id)
-            if reserved
-            else StockRejected(order_id=order.order_id, reason="estoque insuficiente")
+            StockRejected(order_id=order.order_id, reason="estoque insuficiente")
+            if crossed is None
+            else StockReserved(order_id=order.order_id)
         )
         await bus.publish(new_event(result, PRODUCER, event.correlation_id))
+        for product in crossed or []:
+            await bus.publish(stock_low_event(product, event.correlation_id))
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:

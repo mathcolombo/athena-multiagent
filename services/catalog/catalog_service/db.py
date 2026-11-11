@@ -77,9 +77,23 @@ class CatalogDb:
             )
         return self.get_product(product_id)
 
-    def reserve_stock(self, items: list[tuple[str, int]]) -> bool:
-        """Reserva todos os itens ou nenhum."""
+    def reserve_stock(self, items: list[tuple[str, int]]) -> list[sqlite3.Row] | None:
+        """Reserva todos os itens ou nenhum.
+
+        Retorna None se a reserva foi rejeitada; caso contrário, os produtos
+        (já com o estoque atualizado) que passaram a ter estoque baixo.
+        """
+
+        def is_low(row: sqlite3.Row | None) -> bool:
+            return (
+                row is not None
+                and row["low_stock_threshold"] is not None
+                and row["stock"] < row["low_stock_threshold"]
+            )
+
+        product_ids = list(dict.fromkeys(product_id for product_id, _ in items))
         with self.conn:
+            before = {pid: is_low(self.get_product(pid)) for pid in product_ids}
             for product_id, quantity in items:
                 updated = self.conn.execute(
                     "UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?",
@@ -87,8 +101,9 @@ class CatalogDb:
                 )
                 if updated.rowcount == 0:
                     self.conn.rollback()
-                    return False
-        return True
+                    return None
+            after = {pid: self.get_product(pid) for pid in product_ids}
+        return [row for pid, row in after.items() if is_low(row) and not before[pid]]
 
     def mark_processed(self, event_id: str) -> bool:
         """Retorna False se o evento já foi processado."""
