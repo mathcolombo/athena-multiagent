@@ -78,6 +78,15 @@ class StockRejected(EventPayload):
     reason: str
 
 
+class StockLow(EventPayload):
+    EVENT_TYPE: ClassVar[str] = "stock.low"
+
+    product_id: str
+    name: str
+    stock: int
+    threshold: int
+
+
 P = TypeVar("P", bound=EventPayload)
 
 
