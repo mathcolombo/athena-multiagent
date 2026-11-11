@@ -28,4 +28,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .status-CONFIRMED { color: var(--ok); } .status-PENDING { color: var(--warn); } .status-REJECTED, .status-CANCELLED { color: var(--err); }
 .low-stock { color: var(--warn); }
 #toast { position: fixed; bottom: 16px; left: 16px; right: 16px; max-width: 480px; padding: 10px 14px; border-radius: 6px; background: var(--text); color: var(--bg); display: none; }
+#low-stock-toasts { position: fixed; top: 16px; right: 16px; width: 360px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; gap: 8px; }
+.low-toast { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 10px 14px; border-radius: 6px; background: var(--warn); color: var(--bg); }
+.low-toast button { padding: 0 6px; border-color: currentColor; color: inherit; line-height: 1.4; }
 .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }

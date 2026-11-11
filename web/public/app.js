@@ -1,7 +1,11 @@
 import {
   CART_OPEN,
+  MAX_TOASTS,
+  TOAST_MS,
   errorMessage,
   formatMoney as money,
+  lowStockMessage,
+  newlyLowStock,
   nextQuantity,
   orderStatusClass,
   parseMoneyToCents,
@@ -28,6 +32,28 @@ function toast(message) {
   toast.timer = setTimeout(() => (el.style.display = "none"), 4000);
 }
 
+function lowStockToast(message) {
+  const box = $("low-stock-toasts");
+  const el = document.createElement("div");
+  el.className = "low-toast";
+  el.setAttribute("role", "status");
+  el.setAttribute("aria-live", "polite");
+  const text = document.createElement("span");
+  text.textContent = message;
+  const close = document.createElement("button");
+  close.className = "ghost";
+  close.textContent = "×";
+  close.setAttribute("aria-label", "Fechar");
+  const remove = () => { clearTimeout(el.timer); el.remove(); };
+  close.addEventListener("click", remove);
+  el.append(text, close);
+  el.timer = setTimeout(remove, TOAST_MS);
+  box.append(el);
+  while (box.children.length > MAX_TOASTS) box.firstElementChild.querySelector("button").click();
+}
+
+let previousProducts = null;
+
 async function api(service, path, { method = "GET", body } = {}) {
   const response = await fetch(`/api/${service}${path}`, requestInit(method, body));
   const data = await response.json().catch(() => null);
@@ -52,6 +78,8 @@ function button(label, onClick, ghost = true) {
 
 async function loadProducts() {
   const products = await api("catalog", "/products");
+  for (const product of newlyLowStock(previousProducts, products)) lowStockToast(lowStockMessage(product));
+  previousProducts = products;
   const body = $("products");
   body.replaceChildren();
   for (const product of products) {

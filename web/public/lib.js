@@ -35,6 +35,20 @@ export function stockClass(product) {
   return product.low_stock ? "low-stock" : "";
 }
 
+/** Produtos que passaram a ficar com estoque baixo entre duas cargas; a primeira carga (previous nulo) não gera nada. */
+export function newlyLowStock(previous, current) {
+  if (!Array.isArray(previous)) return [];
+  const wasLow = new Map(previous.map(p => [p.id, Boolean(p.low_stock)]));
+  return current.filter(p => p.low_stock && wasLow.get(p.id) === false);
+}
+
+export function lowStockMessage(product) {
+  return `Estoque baixo: ${product.name} — ${product.stock} un. (limite ${product.low_stock_threshold})`;
+}
+
+export const MAX_TOASTS = 3;
+export const TOAST_MS = 5000;
+
 export function shortId(id) {
   return String(id).slice(0, 8);
 }
