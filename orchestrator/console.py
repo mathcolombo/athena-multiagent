@@ -47,6 +47,13 @@ class ConsoleLog:
                 return self.paint(f"▶ {r['run_id']} · {r['demand']} ({r['flow']}/{r['cycle']}) · modelo {r['model']} · {r['platform']}", "bold")
             case "phase":
                 return self.paint(f"── {r['name']}", "bold")
+            case "tasks_planned":
+                listed = " · ".join(f"{task['id']} {task['title']}" for task in r["tasks"])
+                return self.paint(f"   {len(r['tasks'])} tasks planejadas: {listed}", "bold")
+            case "task_started":
+                return self.paint(f"▸ task {r['task']} ({r['position']}/{r['total']}): {r['title']}", "bold")
+            case "task_finished":
+                return f"   {ok} task {r['task']} commitada"
             case "coverage":
                 percent = "indisponível" if r["percent"] is None else f"{r['percent']}%"
                 return f"   cobertura {'antes' if r['phase'] == 'before' else 'depois'}: {percent}"

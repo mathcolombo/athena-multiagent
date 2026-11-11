@@ -3,11 +3,15 @@ import re
 import shutil
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
+from orchestrator.config import MAX_TASKS
 from orchestrator.platform import run
 
 COVERAGE_LINE = re.compile(r"^TOTAL\s+\d+\s+\d+\s+(\d+)%", re.MULTILINE)
+TASK_HEADING = re.compile(r"^###\s+(T\d+):\s*(.+?)\s*$", re.MULTILINE)
+NEXT_SECTION = re.compile(r"^##\s", re.MULTILINE)
 PYTEST_TESTS_FAILED = 1
 
 
@@ -21,6 +25,25 @@ def changed_since(worktree: Path, base_ref: str) -> list[str]:
     return output.split()
 
 
+@dataclass(frozen=True)
+class Task:
+    id: str
+    title: str
+    body: str
+
+
+def parse_tasks(story: str) -> list[Task]:
+    headings = list(TASK_HEADING.finditer(story))
+    tasks = []
+    for index, heading in enumerate(headings):
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(story)
+        segment = story[heading.end():end]
+        section_end = NEXT_SECTION.search(segment)
+        body = segment[: section_end.start()] if section_end else segment
+        tasks.append(Task(heading.group(1), heading.group(2), body.strip()))
+    return tasks
+
+
 def story_problems(path: Path) -> list[str]:
     if not path.exists():
         return [f"arquivo da história não foi criado: {path.name}"]
@@ -30,6 +53,16 @@ def story_problems(path: Path) -> list[str]:
         problems.append("nenhum cenário BDD (linha 'Cenário:') encontrado")
     if not re.search(r"^\s*Regra:\s*\S+", text, re.MULTILINE):
         problems.append("história não rastreada a uma regra (linha 'Regra: <id>')")
+    tasks = parse_tasks(text)
+    if not tasks:
+        problems.append("nenhuma task no formato '### T1: <título>' na seção '## Tasks'")
+    if len(tasks) > MAX_TASKS:
+        problems.append(f"{len(tasks)} tasks; o máximo é {MAX_TASKS}")
+    if len({task.id for task in tasks}) != len(tasks):
+        problems.append("identificadores de task repetidos")
+    for task in tasks:
+        if not re.search(r"^\s*Cenários:\s*\S+", task.body, re.MULTILINE):
+            problems.append(f"{task.id} não indica os cenários que cobre (linha 'Cenários: ...')")
     return problems
 
 
