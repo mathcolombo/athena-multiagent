@@ -5,9 +5,11 @@ from pathlib import Path
 
 from orchestrator.agents import CODIGO, DEPLOY, REQUISITOS, TESTES, AgentSpec, policy_for
 from orchestrator.checks import (
+    Task,
     changed_files,
     changed_since,
     coverage_percent,
+    parse_tasks,
     regression_fails_without_fix,
     story_problems,
     tests_without_assertions,
@@ -116,24 +118,37 @@ class Supervisor:
 
     async def _feature(self) -> str:
         self._record_coverage("before")
-        self._phase("Requisitos: história e critérios BDD")
+        self._phase("Refinamento: história, critérios BDD e tasks")
         await self._write_story()
         await self._approve_story()
-        self._phase("Implementação")
+        tasks = parse_tasks((self.worktree / self.story_path).read_text(encoding="utf-8"))
+        self.trace.emit("tasks_planned", tasks=[{"id": task.id, "title": task.title} for task in tasks])
+        for position, task in enumerate(tasks, 1):
+            await self._implement_task(task, position, len(tasks))
+        return await self._deliver(f"feat({self.service}): {self.demand.title}", committed=True)
+
+    async def _implement_task(self, task: Task, position: int, total: int) -> None:
+        """Cada task vira um commit próprio, com código e testes verificados antes de seguir para a próxima."""
+        self.trace.emit("task_started", task=task.id, title=task.title, position=position, total=total)
+        task_block = f'<task id="{task.id}">\n### {task.id}: {task.title}\n{task.body}\n</task>'
+        context = f"História completa em {self.story_path}.\n\n{task_block}\n\n{self.demand_block}"
+        self._phase(f"Task {task.id} ({position}/{total}): implementação")
         await self._agent(
             CODIGO,
-            f"Implemente a história aprovada em {self.story_path}.\n\n{self.demand_block}",
+            f"Implemente somente a task {task.id}. As tasks anteriores já estão commitadas; "
+            f"não antecipe as seguintes.\n\n{context}",
         )
-        self._phase("Testes automatizados")
+        self._phase(f"Task {task.id} ({position}/{total}): testes")
         await self._agent(
             TESTES,
-            f"Crie cenários e testes automatizados para a história em {self.story_path}, "
-            f"cobrindo cada cenário BDD.\n\n{self.demand_block}",
+            f"Crie testes automatizados para os critérios e cenários da task {task.id}.\n\n{context}",
         )
-        return await self._deliver(f"feat({self.service}): {self.demand.title}")
+        await self._quality_checks(current_task_only=True)
+        self._commit(f"feat({self.service}): {task.id} {task.title}")
+        self.trace.emit("task_finished", task=task.id)
 
     async def _write_story(self) -> None:
-        prompt = f"Escreva a história em {self.story_path}.\n\n{self.demand_block}"
+        prompt = f"Refine a demanda na história em {self.story_path}, com critérios BDD e tasks.\n\n{self.demand_block}"
         for _ in range(MAX_REWORK_ROUNDS):
             await self._agent(REQUISITOS, prompt)
             problems = story_problems(self.worktree / self.story_path)
@@ -188,10 +203,11 @@ class Supervisor:
         )
         return "completed"
 
-    async def _quality_checks(self) -> None:
+    async def _quality_checks(self, current_task_only: bool = False) -> None:
         self._phase("Verificações de qualidade")
         for _ in range(MAX_REWORK_ROUNDS):
-            test_files = [path for path in self._work_files() if is_test_file(path)]
+            files = changed_files(self.worktree) if current_task_only else self._work_files()
+            test_files = [path for path in files if is_test_file(path)]
             problems = []
             if not test_files:
                 problems.append("nenhum arquivo de teste foi criado ou alterado")
@@ -213,10 +229,13 @@ class Supervisor:
     def _work_files(self) -> list[str]:
         return sorted({*changed_files(self.worktree), *changed_since(self.worktree, self.platform.base_ref)})
 
-    async def _deliver(self, title: str) -> str:
-        await self._quality_checks()
-        self._phase("Commit e pull request")
-        self._commit(title)
+    async def _deliver(self, title: str, committed: bool = False) -> str:
+        if not committed:
+            await self._quality_checks()
+            self._phase("Commit e pull request")
+            self._commit(title)
+        else:
+            self._phase("Pull request")
         pull_request = self.platform.open_pr(self.worktree, self.branch, title, self._pr_body())
         self.trace.emit("pr_opened", number=pull_request.number, url=pull_request.url)
         await self._wait_ci(pull_request)

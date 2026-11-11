@@ -21,6 +21,7 @@ class RunSummary:
     tokens_in: int = 0
     tokens_out: int = 0
     tool_calls: int = 0
+    tasks: int = 0
     interventions: int = 0
     rejections: int = 0
     edits: int = 0
@@ -46,6 +47,8 @@ def summarize(path: Path) -> RunSummary | None:
             summary.tokens_in += event["tokens_in"] + event["tokens_cache_read"] + event["tokens_cache_write"]
             summary.tokens_out += event["tokens_out"]
             summary.tool_calls += event["tool_calls"]
+        elif kind == "tasks_planned":
+            summary.tasks = len(event["tasks"])
         elif kind == "gate_decision":
             summary.interventions += 1
             summary.human_min += event["human_minutes"]
@@ -75,12 +78,12 @@ def _render(runs: list[RunSummary]) -> str:
         "",
         "## Métricas por execução",
         "",
-        "| Demanda | Ciclo | Status | Tempo total (h) | Agentes (min) | Humano (min) | Custo (US$) | Intervenções | Reprovações | Edições | Falhas de CI | Cobertura antes → depois |",
-        "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| Demanda | Ciclo | Tasks | Status | Tempo total (h) | Agentes (min) | Humano (min) | Custo (US$) | Intervenções | Reprovações | Edições | Falhas de CI | Cobertura antes → depois |",
+        "|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for run in runs:
         lines.append(
-            f"| {run.demand} | {run.cycle} | {run.status} | {run.wall_h:.2f} | {run.agent_min:.1f} | "
+            f"| {run.demand} | {run.cycle} | {run.tasks or '-'} | {run.status} | {run.wall_h:.2f} | {run.agent_min:.1f} | "
             f"{run.human_min:.1f} | {run.cost_usd:.2f} | {run.interventions} | {run.rejections} | {run.edits} | "
             f"{run.ci_failures} | {run.coverage_before}% → {run.coverage_after}% |"
         )

@@ -4,23 +4,37 @@ Define o que é medido e como executar o piloto do processo guiado por agentes (
 
 ## Fluxos
 
-Cada fluxo é um serviço com dois ciclos completos.
+Cada fluxo é um serviço com dois ciclos completos. A entrada de cada execução é uma **issue do GitHub**.
 
-| Fluxo | Ciclo | Demanda | Passos |
+| Fluxo | Ciclo | Issue | Passos |
 |---|---|---|---|
-| Catálogo | Funcionalidade | CAT-FEAT-01 | Requisitos → G3 → Código → Testes → CI → G5 → Deploy em homologação → G7 |
-| Catálogo | Bug | CAT-BUG-01 | Reprodução e patch → Teste de regressão → CI → G5 → Deploy em homologação → G7 |
-| Pedidos | Funcionalidade | ORD-FEAT-01 | Igual ao ciclo de funcionalidade |
-| Pedidos | Bug | ORD-BUG-01 | Igual ao ciclo de bug |
-| Verificação | Guarda-corpo | GRD-01 | Agente de Código recebe um relato com injeção de instrução; sem PR |
+| Catálogo | Funcionalidade | #2 CAT-FEAT-01 | Refinamento (história e tasks) → G3 → para cada task: Código → Testes → verificações → commit → PR → CI → G5 → Deploy em homologação → G7 |
+| Catálogo | Bug | #3 CAT-BUG-01 | Reprodução e patch → Teste de regressão → CI → G5 → Deploy em homologação → G7 |
+| Pedidos | Funcionalidade | #4 ORD-FEAT-01 | Igual ao ciclo de funcionalidade |
+| Pedidos | Bug | #5 ORD-BUG-01 | Igual ao ciclo de bug |
+| Verificação | Guarda-corpo | #6 GRD-01 | Agente de Código recebe um relato com injeção de instrução; sem PR |
 
-Cada demanda tem uma issue no GitHub (#2 a #6), indicada no campo `issue:` do arquivo da demanda. O PR aberto pelo orquestrador inclui `Closes #N`, então o merge no G5 fecha a issue. A issue do GRD-01 é fechada manualmente depois da execução, com o resultado registrado no trace.
+### Issue como card de entrada
+
+- O orquestrador só aceita issues **abertas** com o rótulo `piloto`, exatamente um rótulo `fluxo:<catalog|cart|orders>` e um `ciclo:<feature|bug|guardrail>`. Só quem tem acesso de triagem aplica rótulos, então pessoas de fora não conseguem colocar uma issue para rodar no repositório público.
+- O título no formato `[ID] título` define o identificador da demanda. Sem isso, o identificador é `ISSUE-<número>`.
+- Só a seção `## Demanda` do corpo vai para os agentes, sempre marcada como dado não confiável. As outras seções (observações, instruções de execução) ficam só para os humanos.
+- O PR inclui `Closes #N`, então o merge no G5 fecha a issue. A issue do GRD-01 é fechada manualmente depois da execução.
+- Para uma nova demanda, crie uma issue com esses rótulos e rode `--issue <número>`.
+
+### Refinamento em tasks (ciclo de funcionalidade)
+
+O Agente de Requisitos e Refinamento escreve a história em `docs/backlog/<ID>.md` com regra, cenários BDD e uma seção `## Tasks`, com 1 a 6 tasks `### T<n>: <título>`. Cada task traz `Cenários:`, `Arquivos:` e `Pronto quando:`. O supervisor rejeita a história se faltar algum desses elementos. No G3 são aprovadas a história e a quebra em tasks.
+
+Depois do G3, cada task é executada em sequência: o Agente de Código implementa só aquela task, o Agente de Testes cobre seus cenários, as verificações de qualidade rodam e o supervisor faz um commit próprio para a task. Ao fim das tasks, sai um único PR, com uma CI e um G5 para a história inteira. Isso mantém o número de intervenções humanas comparável entre os ciclos. O trace registra `tasks_planned`, `task_started` e `task_finished`.
+
+O ciclo de bug não passa por refinamento.
 
 ## Agentes e limites
 
 | Agente | Atividades | Escrita | Comandos | Turnos | Orçamento (US$) |
 |---|---|---|---|---:|---:|
-| Requisitos | 2, 3 | `docs/backlog/` | nenhum | 20 | 1,50 |
+| Requisitos e refinamento | 2, 3 | `docs/backlog/` | nenhum | 20 | 1,50 |
 | Código | 6, 7 | serviço do fluxo e `libs/events/`, exceto `tests/`; `.pilot/repro/` | pytest, git somente leitura | 50 | 4,00 |
 | Testes | 8, 10 | `tests/` do serviço e de `libs/events/` | pytest, git somente leitura | 40 | 3,00 |
 | Deploy | 11, 12 | `.pilot/deploy_report.md` | scripts de homologação, compose ps/logs | 20 | 1,00 |
@@ -83,10 +97,10 @@ python3 -m venv .venv
 ```
 
 ```bash
-.venv/bin/python -m orchestrator run --flow catalog --cycle feature --operator "Nome (papel)"
+.venv/bin/python -m orchestrator run --issue 2 --operator "Nome (papel)"
 ```
 
-Repita com `--flow catalog --cycle bug`, `--flow orders --cycle feature`, `--flow orders --cycle bug` e `--flow catalog --cycle guardrail`.
+Repita com `--issue 4` (ORD-FEAT-01), `--issue 5` (ORD-BUG-01) e `--issue 6` (GRD-01). A #3 (CAT-BUG-01) já foi executada.
 
 Durante a execução, o terminal mostra cada fase do supervisor, as mensagens e ferramentas de cada agente, os bloqueios de guarda-corpo, o custo por agente e as decisões nos gates. Use `--quiet` para ver só os gates. O registro completo continua no trace.
 

@@ -7,8 +7,8 @@ import time
 from datetime import UTC, datetime
 
 from orchestrator.console import ConsoleLog
-from orchestrator.config import RUNS_DIR, SERVICES, TRACES_DIR, WORKTREES_DIR, REPO_ROOT, Settings
-from orchestrator.demands import find_demand
+from orchestrator.config import RUNS_DIR, TRACES_DIR, WORKTREES_DIR, REPO_ROOT, Settings
+from orchestrator.demands import InvalidIssue, fetch_demand
 from orchestrator.flows import RunAborted, Supervisor
 from orchestrator.gates import ScriptedGates, TerminalGates
 from orchestrator.platform import GitHubPlatform, LocalPlatform, run
@@ -20,9 +20,8 @@ from orchestrator.tracing import Trace
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="orchestrator")
     commands = parser.add_subparsers(dest="command", required=True)
-    pilot = commands.add_parser("run", help="executa um ciclo do piloto")
-    pilot.add_argument("--flow", choices=SERVICES, required=True)
-    pilot.add_argument("--cycle", choices=("feature", "bug", "guardrail"), required=True)
+    pilot = commands.add_parser("run", help="executa o ciclo de uma issue do piloto")
+    pilot.add_argument("--issue", type=int, required=True, help="número da issue com os rótulos piloto, fluxo: e ciclo:")
     pilot.add_argument("--platform", choices=("github", "local"), default="github")
     pilot.add_argument("--auto-approve", action="store_true", help="somente ensaio com --platform local")
     pilot.add_argument("--operator", help="nome e papel padrão do aprovador")
@@ -35,10 +34,13 @@ def parse_args() -> argparse.Namespace:
 async def execute(args: argparse.Namespace) -> int:
     if args.auto_approve and args.platform != "local":
         raise SystemExit("--auto-approve só é aceito em ensaios com --platform local")
-    if args.platform == "github" and shutil.which("gh") is None:
+    if shutil.which("gh") is None:
         raise SystemExit("GitHub CLI (gh) não encontrado; instale e autentique com 'gh auth login'")
 
-    demand = find_demand(args.flow, args.cycle)
+    try:
+        demand = fetch_demand(args.issue)
+    except InvalidIssue as error:
+        raise SystemExit(f"Issue inválida para o piloto: {error}") from error
     run_id = f"{datetime.now(UTC):%Y%m%dT%H%M%S}-{demand.id.lower()}"
     rehearsal = args.platform == "local"
     platform = GitHubPlatform() if args.platform == "github" else LocalPlatform()
